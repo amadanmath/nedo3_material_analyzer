@@ -1,0 +1,9 @@
+TODO.md
+app/nedo3/settings_local.py
+db.sqlite3
+__pycache__
+*.pyc
+app/static
+*venv
+data
+.env

@@ -1,0 +1,68 @@
+{% load static %}
+{% load webapp_extras %}
+{% prepare_context %}
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    {% block head %}
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+      {% block styles %}
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css" integrity="sha384-TX8t27EcRE3e/ihU7zmQxVncDAy5uIKz4rEkgIXeMed4M0jlfIDPvg6uqKI2xXr2" crossorigin="anonymous">
+        <link rel="stylesheet" href="{% static 'webapp/style.css' %}">
+      {% endblock %}
+
+      <title>{% block title %}{% endblock %}</title>
+    {% endblock %}
+  </head>
+  <body>
+    <nav class="navbar navbar-dark fixed-top bg-dark">
+      <a href="{% url 'index' %}" class="navbar-brand">
+        NEDO3
+      </a>
+
+      <nav class="navbar-nav d-flex flex-row">
+        {% block topright %}{% endblock %}
+
+        {% if user.is_authenticated %}
+          <a class="navbar-toggler show ml-3" href="{% url 'list' %}">
+            List
+            <span id="new_count" class="badge badge-light if-not-empty">{{ new_count }}</span>
+          </a>
+
+          <a class="navbar-toggler show ml-3" href="{% url 'logout' %}">
+            Logout
+          </a>
+        {% endif %}
+      </nav>
+    </nav>
+
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer font-small text-muted bg-dark">
+      <div class="footer-copyright text-center py-3">
+        <div>Version 0.1</div>
+        <div>
+          <a href="https://www.airc.aist.go.jp/en/kirt/">Knowledge and Information Research Team (KIRT)</a>
+        </div>
+        <div>
+          <a href="https://www.airc.aist.go.jp/en/">Artificial Intelligence Research Center (AIRC)</a>
+        </div>
+        <div>
+          <a href="https://www.aist.go.jp/index_en.html">National Institute of Advanced Industrial Science and Technology (AIST)</a>
+        </div>
+      </div>
+    </footer>
+
+    {{ urls | json_script:"urls" }}
+    <script type="text/javascript" src="{% static 'webapp/script.js' %}"></script>
+
+    {% block scripts %}
+    {% endblock %}
+
+  </body>
+</html>

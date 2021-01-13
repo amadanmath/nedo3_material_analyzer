@@ -1,0 +1,39 @@
+{% extends "webapp/base.html" %}
+{% load static %}
+
+{% block scripts %}
+  {{ block.super }}
+  <script type="text/javascript" src="{% static "webapp/brat/head.load.min.js" %}"></script>
+  {{ data | json_script:"data" }}
+  <script type="text/javascript">
+    const urls = {
+      jquery: "{% static "webapp/brat/jquery.min.js" %}",
+      libraries: [
+        "{% static "webapp/brat/jquery-ui.min.js" %}",
+        "{% static "webapp/brat/jquery-ui.combobox.js" %}",
+        "{% static "webapp/brat/jquery.svg.min.js" %}",
+        "{% static "webapp/brat/jquery.svgdom.min.js" %}",
+        "{% static "webapp/brat/jquery.ba-bbq.min.js" %}",
+        "{% static "webapp/brat/jquery.json.min.js" %}",
+        // brat helpers
+        "{% static "webapp/brat/util.js" %}",
+        // brat modules
+        "{% static "webapp/brat/dispatcher.js" %}",
+        "{% static "webapp/brat/visualizer.js" %}",
+      ],
+    };
+  </script>
+  <script type="text/javascript" src="{% static "webapp/show.js" %}"></script>
+{% endblock %}
+
+{% block styles %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'webapp/brat/style-vis.css' %}">
+{% endblock %}
+
+{% block content %}
+  <main role="main" class="bd-content row">
+    <div id="commentpopup"></div>
+    <div id="svg" class="col-md-12"></div>
+  </main>
+{% endblock %}

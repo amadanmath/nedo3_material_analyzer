@@ -1,0 +1,84 @@
+{% extends "webapp/base.html" %}
+
+{% block content %}
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>Text</th>
+        <th>Action</th>
+        <th>State</th>
+        <th>Started at</th>
+        <th>Duration</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for job in jobs_page %}
+        <tr>
+          <td>
+            {{ job.txt | truncatewords:7 }}
+          </td>
+          <td>{{ job.action }}</td>
+          <td>
+            {% if job.is_finished %}
+              <a href="{% url 'show' job.id %}">
+                {{ job.state_name }}
+                {% if not job.viewed %}
+                  <span class="badge badge-dark">New</span>
+                {% endif %}
+              </a>
+            {% else %}
+              {{ job.state_name }}
+            {% endif %}
+            </a>
+          </td>
+          <td class="text-nowrap">
+            {{ job.started_at | date:"Y-m-d H:i" }}
+          </td>
+          <td>
+            {% if job.finished_at %}
+              {{ job.duration | floatformat:2 }}s
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <nav>
+    <ul class="pagination justify-content-center">
+      {% if jobs_page.has_previous %}
+        <li class="page-item">
+          <a class="page-link" href="?page=1" tabindex="-1">First</a>
+        </li>
+        <li class="page-item">
+          <a class="page-link" href="?page={{ jobs_page.previous_page_number }}" tabindex="-1">Previous</a>
+        </li>
+      {% else %}
+        <li class="page-item disabled">
+          <a class="page-link">First</a>
+        </li>
+        <li class="page-item disabled">
+          <a class="page-link" tabindex="-1">Previous</a>
+        </li>
+      {% endif %}
+      <li class="page-item disabled">
+        <a class="page-link">{{ jobs_page.number }} / {{ jobs_page.paginator.num_pages }}</a>
+      </li>
+      {% if jobs_page.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ jobs_page.next_page_number }}" tabindex="-1">Previous</a>
+        </li>
+        <li class="page-item">
+          <a class="page-link" href="?page={{ jobs_page.num_pages }}" tabindex="-1">Last</a>
+        </li>
+      {% else %}
+        <li class="page-item disabled">
+          <a class="page-link" tabindex="-1">Previous</a>
+        </li>
+        <li class="page-item disabled">
+          <a class="page-link">Last</a>
+        </li>
+      {% endif %}
+    </ul>
+  </nav>
+{% endblock %}

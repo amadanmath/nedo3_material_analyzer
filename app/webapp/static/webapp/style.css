@@ -1,0 +1,39 @@
+:root {
+  --header-height: 56px;
+  --footer-height: 130px;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  padding-top: var(--header-height);
+  min-height: 100%;
+  position: relative;
+}
+
+body::after {
+  content: '';
+  display: block;
+  height: var(--footer-height); /* Set same as footer's height */
+}
+
+footer {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: var(--footer-height);
+}
+
+main {
+  padding-bottom: 1rem;
+}
+
+.asteriskField {
+  display: none;
+}
+
+.if-not-empty:empty {
+  display: none;
+}

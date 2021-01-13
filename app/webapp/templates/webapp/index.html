@@ -1,0 +1,33 @@
+{% extends "webapp/base.html" %}
+
+{% block content %}
+  <main role="main" class="bd-content row">
+    <form id="text_form" method="POST" action="{% url 'analyze' %}" class="col-md-12">
+      {% csrf_token %}
+      <div class="form-group">
+        <textarea id="text" name="text" class="form-control" rows="10" placeholder="Enter text"></textarea>
+      </div>
+
+      <div class="form-group d-flex flex-row">
+        {% for worker in workers %}
+          <button type="submit" class="btn btn-primary waiting-ready" name="action" value="{{ worker.id }}" title="{{ worker.tooltip }}">
+            {{ worker.name }}
+          </button>
+        {% endfor %}
+        <!--
+        <input id="btn_annotate" type="submit" value="Annotate" class="btn btn-primary waiting-ready" title="Submit your text to be annotated"/>
+        -->
+        <input id="btn_clear" type="button" value="Clear" class="btn btn-secondary" title="Clear the text" disabled/>
+        <div class="flex-grow-1">&nbsp;</div>
+        <select id="drop_samples" class="form-control waiting-ready" disabled>
+          <option value="" selected>Load a sample</option>
+          {% comment %}
+          {% for sample in samples.values %}
+            <option value="{{sample["id"]}}">{{sample["id"]}}</option>
+          {% endfor %}
+          {% endcomment %}
+        </select>
+      </div>
+    </form>
+  </main>
+{% endblock %}
