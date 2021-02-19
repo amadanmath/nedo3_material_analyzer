@@ -1,33 +1,170 @@
-{% extends "webapp/base.html" %}
+{% load static %}
 
-{% block content %}
-  <main role="main" class="bd-content row">
-    <form id="text_form" method="POST" action="{% url 'analyze' %}" class="col-md-12">
-      {% csrf_token %}
-      <div class="form-group">
-        <textarea id="text" name="text" class="form-control" rows="10" placeholder="Enter text"></textarea>
-      </div>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 
-      <div class="form-group d-flex flex-row">
-        {% for worker in workers %}
-          <button type="submit" class="btn btn-primary waiting-ready" name="action" value="{{ worker.id }}" title="{{ worker.tooltip }}">
-            {{ worker.name }}
-          </button>
-        {% endfor %}
-        <!--
-        <input id="btn_annotate" type="submit" value="Annotate" class="btn btn-primary waiting-ready" title="Submit your text to be annotated"/>
-        -->
-        <input id="btn_clear" type="button" value="Clear" class="btn btn-secondary" title="Clear the text" disabled/>
-        <div class="flex-grow-1">&nbsp;</div>
-        <select id="drop_samples" class="form-control waiting-ready" disabled>
-          <option value="" selected>Load a sample</option>
-          {% comment %}
-          {% for sample in samples.values %}
-            <option value="{{sample["id"]}}">{{sample["id"]}}</option>
-          {% endfor %}
-          {% endcomment %}
-        </select>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css" integrity="sha384-TX8t27EcRE3e/ihU7zmQxVncDAy5uIKz4rEkgIXeMed4M0jlfIDPvg6uqKI2xXr2" crossorigin="anonymous">
+    <link rel="stylesheet" href="{% static 'webapp/style.css' %}">
+    <link rel="stylesheet" href="{% static 'webapp/brat/style-vis.css' %}">
+
+    <title>NEDO3</title>
+  </head>
+  <body>
+    <nav class="navbar navbar-dark fixed-top bg-dark">
+      <a href="{% url 'index' %}" class="navbar-brand">
+        NEDO3
+      </a>
+
+      <nav class="logged-in navbar-nav d-flex flex-row">
+        <a id="list_button" class="navbar-toggler show ml-3" href="#">
+          List
+          <span id="new_count" class="badge if-not-empty"></span>
+        </a>
+
+        <a class="navbar-toggler show ml-3" href="#">
+          Logout
+        </a>
+      </nav>
+    </nav>
+
+    <main role="main" class="bd-content row">
+      <section id="login_page">
+        <div class="d-flex justify-content-center mt-5">
+          <form id="login_form" class="d-flex justify-content-center flex-column">
+            <div class="form-group mb-3">
+              <div id="login_message"></div>
+            </div>
+            <div class="form-group mb-3">
+              <label for="login_username">Username</label>
+              <input id="login_username" class="form-control"/>
+            </div>
+            <div class="form-group mb-3">
+              <label for="login_password">Password</label>
+              <input id="login_password" class="form-control" type="password"/>
+            </div>
+            <div class="d-flex justify-content-center mt-3 login_container">
+              <button type="submit" name="button" class="form-control btn btn-primary">Login</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section id="list_page">
+        <div class="col-md-12">
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th>Text</th>
+                <th>Action</th>
+                <th>State</th>
+                <th>Started at</th>
+              </tr>
+            </thead>
+            <tbody>
+            </tbody>
+          </table>
+
+          <nav>
+            <ul class="pagination justify-content-center">
+              <li class="page-item nav-first">
+                <a class="page-link" href="#" tabindex="-1">First</a>
+                </a>
+              </li>
+              <li class="page-item nav-prev">
+                <a class="page-link" href="#" tabindex="-1">Previous</a>
+                </a>
+              </li>
+              <li class="page-item nav-curr">
+                <a class="page-link" href="#" tabindex="-1"></a>
+                </a>
+              </li>
+              <li class="page-item nav-next">
+                <a class="page-link" href="#" tabindex="-1">Next</a>
+                </a>
+              </li>
+              <li class="page-item nav-last">
+                <a class="page-link" href="#" tabindex="-1">Last</a>
+                </a>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      </section>
+
+      <section id="input_page">
+        <form id="input_form" class="col-md-12">
+          <div class="form-group">
+            <textarea id="input_text" name="text" class="form-control" rows="10" placeholder="Enter text"></textarea>
+          </div>
+
+          <div class="form-group d-flex flex-row">
+            <span id="workers">
+              {% for worker in workers %}
+                <button type="submit" class="btn btn-primary waiting-ready" name="action" value="{{ worker.id }}" title="{{ worker.tooltip }}">
+                  {{ worker.name }}
+                </button>
+              {% endfor %}
+            </span>
+            <input id="btn_clear" type="button" value="Clear" class="btn btn-secondary" title="Clear the text" disabled/>
+            <div class="flex-grow-1">&nbsp;</div>
+            {% comment %}
+            <select id="drop_samples" class="form-control waiting-ready" disabled>
+              <option value="" selected>Load a sample</option>
+              {% for sample in samples.values %}
+                <option value="{{sample["id"]}}">{{sample["id"]}}</option>
+              {% endfor %}
+            </select>
+            {% endcomment %}
+          </div>
+        </form>
+      </section>
+
+      <section id="show_page">
+        <div id="commentpopup"></div>
+        <div id="svg" class="col-md-12"></div>
+      </section>
+    </main>
+
+    <footer class="footer font-small text-muted bg-dark">
+      <div class="footer-copyright text-center py-3">
+        <div>Version 0.1</div>
+        <div>
+          <a href="https://www.airc.aist.go.jp/en/kirt/">Knowledge and Information Research Team (KIRT)</a>
+        </div>
+        <div>
+          <a href="https://www.airc.aist.go.jp/en/">Artificial Intelligence Research Center (AIRC)</a>
+        </div>
+        <div>
+          <a href="https://www.aist.go.jp/index_en.html">National Institute of Advanced Industrial Science and Technology (AIST)</a>
+        </div>
       </div>
-    </form>
-  </main>
-{% endblock %}
+    </footer>
+
+    {{ data | json_script:"data" }}
+    <script type="text/javascript" src="{% static "webapp/brat/head.load.min.js" %}"></script>
+    <script type="text/javascript">
+      const urls = {
+        jquery: "{% static "webapp/brat/jquery.min.js" %}",
+        libraries: [
+          "{% static "webapp/brat/jquery-ui.min.js" %}",
+          "{% static "webapp/brat/jquery-ui.combobox.js" %}",
+          "{% static "webapp/brat/jquery.svg.min.js" %}",
+          "{% static "webapp/brat/jquery.svgdom.min.js" %}",
+          "{% static "webapp/brat/jquery.ba-bbq.min.js" %}",
+          "{% static "webapp/brat/jquery.json.min.js" %}",
+          // brat helpers
+          "{% static "webapp/brat/util.js" %}",
+          // brat modules
+          "{% static "webapp/brat/dispatcher.js" %}",
+          "{% static "webapp/brat/visualizer.js" %}",
+          "{% static "webapp/page.js" %}",
+        ],
+      };
+    </script>
+    <script type="text/javascript" src="{% static 'webapp/script.js' %}"></script>
+
+  </body>
+</html>

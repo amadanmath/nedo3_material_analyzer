@@ -7,10 +7,12 @@ MAX_ACTION_LENGTH=30
 
 
 class Job(models.Model):
+    QUEUED = 'Q'
     STARTED = 'S'
     FINISHED = 'F'
     ERROR = 'E'
     STATE_CHOICES = [
+        (QUEUED, 'Queued'),
         (STARTED, 'Started'),
         (FINISHED, 'Finished'),
         (ERROR, 'Error'),
@@ -21,7 +23,7 @@ class Job(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='jobs')
     started_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True)
-    state = models.CharField(max_length=1, choices=STATE_CHOICES, default=STARTED)
+    state = models.CharField(max_length=1, choices=STATE_CHOICES, default=QUEUED)
     viewed = models.BooleanField(default=False)
     action = models.CharField(max_length=MAX_ACTION_LENGTH)
     txt = models.TextField()

@@ -6,10 +6,12 @@ services:
     build:
       context: ./app
     # command: python manage.py runserver 0.0.0.0:8000
-    command: gunicorn nedo3.wsgi:application --bind 0.0.0.0:8000
+    # command: gunicorn nedo3.wsgi:application --bind 0.0.0.0:8000
+    command: daphne -b 0.0.0.0 -p 8000 nedo3.asgi:application
     volumes:
       - ./app/:/usr/src/app/
       - static_volume:/home/app/web/static
+    tty: true
     # ports:
     #   - 8000:8000
     expose:
@@ -24,13 +26,17 @@ services:
       - POSTGRES_USER=$SQL_USER
       - POSTGRES_PASSWORD=$SQL_PASSWORD
       - POSTGRES_DB=$SQL_DATABASE
+  redis:
+    image: redis:alpine
+    ports:
+     - 6379:6379
   nginx:
     build: ./nginx
     volumes:
       - static_volume:/home/app/web/static
     ports:
-      # - 1337:80
-      - 80:80
+      # - 80:80
+      - $HTTP_PORT:80
     depends_on:
       - web
 

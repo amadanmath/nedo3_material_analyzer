@@ -42,7 +42,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'crispy_forms',
+    'channels',
     'webapp',
 ]
 
@@ -74,7 +74,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'nedo3.wsgi.application'
+ASGI_APPLICATION = 'nedo3.asgi.application'
 
 
 # Database
@@ -88,7 +88,7 @@ if 'SQL_ENGINE' in os.environ:
             "USER": os.environ["SQL_USER"],
             "PASSWORD": os.environ["SQL_PASSWORD"],
             "HOST": os.environ["SQL_HOST"],
-            "PORT": os.environ["SQL_PORT"],
+            "PORT": int(os.environ["SQL_PORT"]),
         }
     }
 else:
@@ -96,6 +96,23 @@ else:
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
+if 'REDIS_HOST' in os.environ:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [(os.environ["REDIS_HOST"], int(os.environ["REDIS_PORT"]))],
+            },
+        },
+    }
+
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer"
         }
     }
 
@@ -138,11 +155,6 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'static'
-
-LOGIN_REDIRECT_URL = reverse_lazy('index')
-LOGOUT_REDIRECT_URL = reverse_lazy('login')
-
-CRISPY_TEMPLATE_PACK = 'bootstrap4'
 
 
 WORKERS = [

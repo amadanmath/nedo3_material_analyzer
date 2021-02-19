@@ -31,5 +31,5 @@ def process(text):
 
     # return visual configuration as a string
     # and a TextAnnotations object
-    sleep(10)
+    sleep(1)
     return (visual_conf, doc)

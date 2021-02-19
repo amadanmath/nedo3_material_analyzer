@@ -1,0 +1,8 @@
+WORKERS = [
+    # {
+    #     "id": "id",
+    #     "name": "name",
+    #     "tooltip": "tooltip",
+    #     "url": "url",
+    # }
+]

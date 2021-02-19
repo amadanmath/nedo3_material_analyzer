@@ -30,10 +30,19 @@ main {
   padding-bottom: 1rem;
 }
 
+main > section {
+  width: 100%;
+  display: none;
+}
+
 .asteriskField {
   display: none;
 }
 
 .if-not-empty:empty {
+  display: none;
+}
+
+.logged-in {
   display: none;
 }
