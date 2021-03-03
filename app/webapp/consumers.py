@@ -1,5 +1,4 @@
 import json
-import threading
 from django.conf import settings
 from django.contrib.auth import authenticate
 from channels.auth import login, logout
@@ -8,9 +7,8 @@ from django.core.paginator import Paginator
 from channels.db import database_sync_to_async
 from asgiref.sync import sync_to_async, async_to_sync
 from traceback import format_exc
-import asyncio
 import logging
-import websockets
+import requests
 from datetime import timezone
 
 from webapp.models import Job
@@ -34,11 +32,11 @@ logger = logging.getLogger(__name__)
 
 
 def epoch(dt):
-    return dt.replace(tzinfo=timezone.utc).timestamp()
+    return dt.replace(tzinfo=timezone.utc).timestamp() if dt else None
 
 @database_sync_to_async
 def get_paginated_jobs(user, page):
-    jobs = Job.objects.filter(user=user).order_by("-started_at")
+    jobs = Job.objects.filter(user=user).order_by("-submitted_at")
     paginator = Paginator(jobs, PAGE_SIZE)
     try:
         paginated_jobs = paginator.page(page)
@@ -49,7 +47,9 @@ def get_paginated_jobs(user, page):
             "maxpage": paginator.num_pages,
             "data": [{
                     "id": str(job.id),
+                    "submitted_at": epoch(job.submitted_at),
                     "started_at": epoch(job.started_at),
+                    "finished_at": epoch(job.finished_at),
                     "state": job.state,
                     "viewed": job.viewed,
                     "action": job.action,
@@ -64,7 +64,7 @@ def get_paginated_jobs(user, page):
 
 
 def user_group_name(username):
-    return "user:{}".format(username)
+    return "user.{}".format(username)
 
 
 
@@ -73,19 +73,11 @@ class BratConsumer(AsyncJsonWebsocketConsumer):
         await self.accept()
         user = self.scope["user"]
         if user.is_authenticated:
-            self.channel_layer.group_add(user_group_name(user.username), self.channel_name)
-            count = await database_sync_to_async(Job.objects.filter(user=user, state=Job.FINISHED, viewed=False).count)()
-        else:
-            count = 0
-        await self.send(json.dumps({
-            "type": "hello",
-            "user": user.is_authenticated and user.username,
-            "count": count,
-        }))
+            await self.channel_layer.group_add(user_group_name(user.username), self.channel_name)
 
     async def disconnect(self, close_code):
         user = self.scope["user"]
-        self.channel_layer.group_discard(user_group_name(user.username), self.channel_name)
+        await self.channel_layer.group_discard(user_group_name(user.username), self.channel_name)
         pass
 
     # get data from websocket
@@ -93,48 +85,50 @@ class BratConsumer(AsyncJsonWebsocketConsumer):
         user = self.scope["user"]
         req_type = content.get("type")
 
-        if req_type == "login":
-            user = await database_sync_to_async(authenticate)(
-                username=content["username"],
-                password=content["password"],
-            )
-            if user:
-                await login(self.scope, user)
-                self.scope["session"].modified = True
-                await database_sync_to_async(self.scope["session"].save)()
-                self.channel_layer.group_add(user_group_name(user.username), self.channel_name)
-                count = await database_sync_to_async(Job.objects.filter(user=user, state=Job.FINISHED, viewed=False).count)()
-                await self.send_json({
-                    "type": "hello",
-                    "user": user.username,
-                    "count": count,
-                })
-            else:
-                await self.send_json({
-                    "type": "loginFailed",
-                })
-
-
-        elif not user.is_authenticated:
+        if not user.is_authenticated:
             await self.send_json({
                 "error": "Not authenticated",
             })
-        # from django.contrib.auth.models import User
-        # user = database_sync_to_async(User.objects.first)()
-        # if False:
-        #     pass
-        # # DEBUG
-
 
         elif req_type == "analyze":
             text = content['text']
             action = content['action']
-            url = workers[action]["url"]
-            # TODO REMOVE
+            user = self.scope["user"]
+            error = None
+            job = None
 
-            threading.Thread(target=asyncio.run, args=(self.analyze_and_respond(
-                text, action, url
-            ),)).start()
+            try:
+                url = workers[action]["url"]
+                job = await database_sync_to_async(Job.objects.create)(
+                    user=user,
+                    action=action,
+                    txt=text,
+                )
+
+                r = requests.post(url, data={
+                    "job": str(job.id),
+                    "text": text,
+                })
+
+                if r.status_code != 202:
+                    error = f"Status code {r.status_code}\n\n{response.text}"
+
+            except requests.exceptions.ConnectionError:
+                error = format_exc()
+
+            if job:
+                if error:
+                    job.ann = error
+                    job.state = Job.ERROR
+                    await database_sync_to_async(job.save)()
+
+                group_name = user_group_name(user.username)
+                await self.channel_layer.group_send(group_name, {
+                    "type": "update",
+                    "msg_type": "changed",
+                    "id": str(job.id),
+                    "state": job.state,
+                })
 
 
         elif req_type == "list":
@@ -183,65 +177,22 @@ class BratConsumer(AsyncJsonWebsocketConsumer):
             if job and not job.viewed:
                 job.viewed = True
                 await database_sync_to_async(job.save)()
-                await self.send_json({
-                    "type": "viewed",
+                group_name = user_group_name(user.username)
+                await self.channel_layer.group_send(group_name, {
+                    "type": "update",
+                    "msg_type": "viewed",
                     "id": str(job.id),
                 })
 
         else:
             logger.error("Bad message type: {}".format(req_type))
 
-        # await self.send_json({
-        #     **result,
-        #     'scope': self.scope,
-        # }, default=lambda o: o.decode() if isinstance(o, bytes) else f"<#{type(o).__name__}>")
 
-    async def analyze_and_respond(self, text, action, url):
-        user = self.scope["user"]
-        error = None
-        job = None
-
-        try:
-            job = await database_sync_to_async(Job.objects.create)(
-                user=user,
-                action=action,
-                txt=text,
-            )
-
-            logger.critical("got job")
-            await self.send_json({
-                "type": "changed",
-                "state": job.state,
-                "id": str(job.id),
-            })
-
-            async with websockets.connect(url) as worker_ws:
-                await worker_ws.send(json.dumps({ 'text': text }))
-                result = json.loads(await worker_ws.recv())
-
-            if "error" in result:
-                error = "[{action}]: {error}".format(action=action, error=result.pop("error"))
-
-        except:
-            error = format_exc()
-
-        if job:
-            if error:
-                logger.error(error)
-                job.ann = error
-                job.state = Job.ERROR
-
-            else:
-                job.txt = result["txt"]
-                job.ann = result["ann"]
-                job.visual_conf = result["visual_conf"]
-                job.state = Job.FINISHED
-
-            await database_sync_to_async(job.save)()
-            await self.send_json({
-                "type": "changed",
-                "id": str(job.id),
-                "state": job.state,
-                # DEBUG
-                # "error": job.ann if job.state == Job.ERROR else None
-            })
+    async def update(self, event):
+        event = dict(event)
+        msg_type = event.pop("msg_type")
+        import sys; print("type:", msg_type, "evt:", type(event), event, file=sys.stderr)
+        await self.send_json({
+            **event,
+            "type": msg_type,
+        })

@@ -21,7 +21,8 @@ class Job(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='jobs')
-    started_at = models.DateTimeField(auto_now_add=True)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True)
     finished_at = models.DateTimeField(null=True)
     state = models.CharField(max_length=1, choices=STATE_CHOICES, default=QUEUED)
     viewed = models.BooleanField(default=False)
@@ -52,5 +53,5 @@ class Job(models.Model):
     class Meta:
         indexes = [
             models.Index(fields=['user', 'state']),
-            models.Index(fields=['started_at']),
+            models.Index(fields=['submitted_at']),
         ]

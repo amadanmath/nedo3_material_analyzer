@@ -36,7 +36,6 @@
 
     const cursor = { x: 0, y: 0 };
 
-
     function prepareEntityToggles(coll) {
       // TODO fix
       disabled_types = {};
@@ -84,7 +83,7 @@
       });
     }
 
-    let collectionReady = Promise.reject();
+    let collectionReady = Promise.resolve();
     let resolveCollectionReady = () => 0;
     function spanAndAttributeTypesLoaded () {
       resolveCollectionReady();
@@ -316,18 +315,46 @@
 
 
     // WEBSOCKET INIT
-    const ws = new WebSocket(
-      'ws://' +
-      window.location.host +
-      '/ws/brat/'
-    );
-    const sendJson = data => ws.send(JSON.stringify(data));
+    const ws_protocol = location.protocol.replace('http', 'ws');
+    const ws_url = (ws_protocol + "//" + location.host + location.pathname).replace(/\/$/, '') + "/ws/brat/";
+    let sendJson = null;
+    const WS = {
+      connect: function connectWS() {
+        return new Promise((resolve, reject) => {
+          const ws = new WebSocket(ws_url);
+
+          ws.onopen = function(evt) {
+            console.log("Connected.")
+            resolve();
+          }
+
+          ws.onmessage = function(evt) {
+            const data = JSON.parse(evt.data);
+            console.log("RECEIVED:", data);
+            wsActions[data.type](data);
+          };
+
+          ws.onclose = function(evt) {
+            console.log("Disconnected. Reconnecting...");
+            WS.connect();
+          };
+
+          sendJson = data => ws.send(JSON.stringify(data));
+          this.disconnect = function() {
+            sendJson = null;
+            delete ws.onclose;
+            ws.close();
+          }
+        });
+      }
+    }
 
 
     // STATE VARIABLES
-    let currentUser = null;
-    let currentCount = 0;
-    let listChanged = false;
+    let currentUser = DATA.user;
+    let currentCount = DATA.count;
+    let listChanged = currentUser && currentCount;
+    console.log("DATA", DATA);
 
 
     // HELPER FUNCTIONS
@@ -338,14 +365,69 @@
       .addClass(listChanged ? 'badge-light' : 'badge-secondary');
     }
 
+    function formatDateTime(date) {
+      const y = date.getFullYear();
+      const m = (date.getMonth() + 1).toString().padStart(2, '0');
+      const d = date.getDate().toString().padStart(2, '0');
+      const h = date.getHours().toString().padStart(2, '0');
+      const i = date.getMinutes().toString().padStart(2, '0');
+      const s = date.getSeconds().toString().padStart(2, '0');
+      return `${y}-${m}-${d} ${h}:${i}:${s}`;
+    }
+
+    function formatDuration(duration) {
+      // const l = duration % 1;
+      duration = Math.trunc(duration);
+      const s = duration % 60;
+      duration = (duration - s) / 60;
+      const i = duration % 60;
+      duration = (duration - i) / 60;
+      const h = duration;
+      let time = `${i.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+      if (h) time = `${h}:${time}`;
+      return time;
+    }
+
+    function logInOut(user, count, message, kind, skipWS) {
+      $('#login_message')
+      .text(message)
+      .removeClass().addClass(`text-${kind}`);
+      currentUser = user;
+      if (!skipWS) {
+        if (user) {
+          WS.connect();
+        } else {
+          WS.disconnect();
+        }
+      }
+      currentCount = count;
+      updateBadge();
+      $('.logged-in').toggle(!!user);
+      page('/input');
+    }
+
 
     // PAGE ROUTING
+    page('*', (ctx, next) => { // DEBUG
+      console.log("PAGE", ctx);
+      next();
+    });
     page({
       hashbang: true,
       dispatch: false,
     });
     page('/', ctx => {
-      $('#login_page').show();
+      if (currentUser) {
+        page('/input');
+      } else {
+        $('main > section').hide();
+        $('#login_page').show();
+        if ($('#login_username').val()) {
+          $('#login_password').focus();
+        } else {
+          $('#login_username').focus();
+        }
+      }
     });
     page('*', (ctx, next) => {
       $('main > section').hide();
@@ -372,39 +454,9 @@
       });
     });
 
+
     // WEBSOCKET ACTIONS
     const wsActions = {
-      hello: ({ user, count }) => {
-        if (user) {
-          $('#login_message')
-          .text('Logged in')
-          .removeClass().addClass('text-success');
-          currentUser = user;
-          currentCount = count;
-          updateBadge();
-          $('.logged-in').show();
-          page('/input');
-        } else {
-          $('#login_message')
-          .text('Please log in')
-          .removeClass();
-          currentUser = null;
-          currentCount = 0;
-          updateBadge();
-          $('.logged-in').hide();
-          page('/');
-        }
-      },
-      loginFailed: () => {
-        $('#login_message')
-        .text('Login failed, please try again')
-        .removeClass().addClass('text-danger');
-        currentUser = null;
-        currentCount = 0;
-        updateBadge();
-        $('.logged-in').hide();
-        page('/');
-      },
       changed: ({ id, state }) => {
         console.log("changed:", id, state); // TODO REMOVE
         listChanged = true;
@@ -426,13 +478,16 @@
           let abbrevdText = item.txt;
           if (abbrevdText.length > MAX_LENGTH) {
             abbrevdText = abbrevdText.substring(0, MAX_LENGTH - 2);
-            const pos = abbrevdText.lastIndexOf(' ');
+            let pos = abbrevdText.lastIndexOf(' ');
             if (pos == -1) pos = abbrevdText.length - 1;
             abbrevdText = abbrevdText.substring(0, pos) + "\u2026";
           }
           let $state;
           let stateString = DATA.states[item.state];
+          let formattedDuration = '';
           if (item.state === "F") {
+            const duration = new Date(item.finished_at * 1000) - new Date(item.started_at * 1000);
+            formattedDuration = formatDuration(duration / 1000);
             const $link = $('<a href="#" class="show-link">')
             .append(
               $('<span>').text(stateString)
@@ -447,7 +502,9 @@
           const $tr = $('<tr>')
           .data('id', item.id)
           .append(
-            $('<td>').text(abbrevdText)
+            $('<td class="text_column">')
+            .text(abbrevdText)
+            .data("fulltext", item.txt)
           )
           .append(
             $('<td>').text(DATA.workers[item.action])
@@ -456,7 +513,10 @@
             $state
           )
           .append(
-            $('<td>').text(new Date(item.started_at * 1000))
+            $('<td>').text(formatDateTime(new Date(item.submitted_at * 1000)))
+          )
+          .append(
+            $('<td>').text(formattedDuration)
           )
           .appendTo($tbody);
         }
@@ -477,47 +537,58 @@
       },
     };
 
-    ws.onmessage = function(evt) {
-      const data = JSON.parse(evt.data);
-      console.log("RECEIVED:", data);
-      wsActions[data.type](data);
-    };
-
-    ws.onclose = function(evt) {
-      console.error('WebSocket closed unexpectedly');
-    };
-
-    // ws.onopen = function(evt) {
-    // }
 
     $('#login_form').submit(evt => {
-      sendJson({
-        "type": "login",
-        "username": $('#login_username').val(),
-        "password": $('#login_password').val(),
+      const formData = new FormData();
+      formData.append("username", $('#login_username').val());
+      formData.append("password", $('#login_password').val());
+      fetch(urls.login, {
+        method: "POST",
+        body: formData,
+      })
+      .then(response => response.json())
+      .then(({ success, user, count }) => {
+        if (success) {
+          logInOut(user, count, "Logged in as ${user}", "success");
+        } else {
+          logInOut(user, count, "Login failed; please try again", "danger");
+        }
       });
-      $('#login_password').val('');
+      $('#login_password').val('').focus();
       evt.preventDefault();
     });
 
+    $('#logout_button').click(evt => {
+      fetch(urls.logout, {
+        method: "POST",
+        body: "",
+      })
+      .then(response => {
+        logInOut(null, 0, "Logged out; please log in again", "warning");
+      });
+    });
+
+    // PROCESSING
     $('#input_form').submit(evt => {
       evt.preventDefault();
     });
     $('#input_form button').click(evt => {
-      console.log( {
-        "type": "analyze",
-        "action": $(evt.target).val(),
-        "text": $('#input_text').val(),
-      });
+      const $input_text = $('#input_text');
       sendJson({
         "type": "analyze",
         "action": $(evt.target).val(),
-        "text": $('#input_text').val(),
+        "text": $input_text.val(),
       });
+      $input_text.val('');
     });
 
     $('#list_button').click(evt => {
       page('/list/1');
+      return false;
+    });
+
+    $('#new_button').click(evt => {
+      page('/input');
       return false;
     });
 
@@ -527,7 +598,20 @@
       return false;
     });
 
+    $('#list_page').on('click', '.text_column', evt => {
+      const text = $(evt.target).data('fulltext');
+      $('#input_text').val(text);
+      page('/input');
+    });
 
+    (currentUser ? WS.connect() : Promise.resolve())
+    .then(() => {
+      if (currentUser) {
+        logInOut(currentUser, currentCount, "Logged in as ${user}", "success", true);
+      } else {
+        logInOut(currentUser, currentCount, "Please log in", "warning", true);
+      }
+    });
   }
 })();
 

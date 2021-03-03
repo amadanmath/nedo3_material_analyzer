@@ -14,20 +14,26 @@
   </head>
   <body>
     <nav class="navbar navbar-dark fixed-top bg-dark">
-      <a href="{% url 'index' %}" class="navbar-brand">
+      <div class="navbar-brand">
         NEDO3
-      </a>
+      </div>
 
-      <nav class="logged-in navbar-nav d-flex flex-row">
-        <a id="list_button" class="navbar-toggler show ml-3" href="#">
-          List
-          <span id="new_count" class="badge if-not-empty"></span>
-        </a>
+      <div class="logged-in">
+        <nav class="navbar-nav d-flex flex-row">
+          <a id="new_button" class="navbar-toggler show ml-3" href="#">
+            New
+          </a>
 
-        <a class="navbar-toggler show ml-3" href="#">
-          Logout
-        </a>
-      </nav>
+          <a id="list_button" class="navbar-toggler show ml-3" href="#">
+            List
+            <span id="new_count" class="badge if-not-empty"></span>
+          </a>
+
+          <a id="logout_button" class="navbar-toggler show ml-3" href="#">
+            Logout
+          </a>
+        </nav>
+      </div>
     </nav>
 
     <main role="main" class="bd-content row">
@@ -60,7 +66,8 @@
                 <th>Text</th>
                 <th>Action</th>
                 <th>State</th>
-                <th>Started at</th>
+                <th>Submitted at</th>
+                <th>Duration</th>
               </tr>
             </thead>
             <tbody>
@@ -108,7 +115,6 @@
                 </button>
               {% endfor %}
             </span>
-            <input id="btn_clear" type="button" value="Clear" class="btn btn-secondary" title="Clear the text" disabled/>
             <div class="flex-grow-1">&nbsp;</div>
             {% comment %}
             <select id="drop_samples" class="form-control waiting-ready" disabled>
@@ -147,6 +153,8 @@
     <script type="text/javascript" src="{% static "webapp/brat/head.load.min.js" %}"></script>
     <script type="text/javascript">
       const urls = {
+        login: "{% url "ajax_login" %}",
+        logout: "{% url "ajax_logout" %}",
         jquery: "{% static "webapp/brat/jquery.min.js" %}",
         libraries: [
           "{% static "webapp/brat/jquery-ui.min.js" %}",

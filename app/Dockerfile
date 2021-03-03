@@ -3,7 +3,7 @@
 ###########
 
 # pull official base image
-FROM python:3.8.3-alpine as builder
+FROM python:3.7-slim-stretch as builder
 
 # set work directory
 WORKDIR /usr/src/app
@@ -13,12 +13,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
 # install psycopg2 dependencies
 # libffi-dev apparently needed on OSX
-RUN apk update \
-    && apk add libffi-dev postgresql-dev gcc g++ python3-dev musl-dev
+# RUN apk update \
+#     && apk add py-pip py-cryptography libffi-dev postgresql-dev gcc g++ python3-dev musl-dev
+RUN apt-get update \
+    && apt-get install -y build-essential python3-dev libpq-dev
 
-COPY ./requirements.txt .
-RUN pip install --upgrade pip \
-    && pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels -r requirements.txt
+
+COPY ./bare_requirements.txt .
+RUN pip3 install --upgrade pip wheel \
+    && pip3 wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels -r bare_requirements.txt
 
 
 
@@ -27,24 +30,25 @@ RUN pip install --upgrade pip \
 #########
 
 # pull official base image
-FROM python:3.8.3-alpine
+FROM python:3.7-slim-stretch
 
 ENV HOME=/home/app APP_HOME=/home/app/web
 
 # create directory for the app user
 RUN mkdir -p $HOME $APP_HOME $APP_HOME/static \
-    && addgroup -S app \
-    && adduser -S app -G app
+    && addgroup --system app \
+    && adduser --system --ingroup app app \
+    && chown app:app $HOME $APP_HOME $APP_HOME/static \
+    && apt-get update \
+    && apt-get install -y build-essential libpq-dev
 
 WORKDIR $APP_HOME
 
 # install dependencies
 COPY --chown=app:app --from=builder /usr/src/app/wheels /wheels
-COPY --chown=app:app --from=builder /usr/src/app/requirements.txt .
-COPY --chown=app:app --from=builder /usr/lib/libstdc++.so.6 /usr/lib/libgcc_s.so.1 /usr/lib/
-RUN apk update \
-    && apk add libpq \
-    && pip install --no-cache /wheels/* \
+RUN apt-get update \
+    && apt-get install -y gcc netcat \
+    && pip3 install --no-cache /wheels/* \
     && sudachipy link -t core
 
 # copy project
