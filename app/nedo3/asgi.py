@@ -17,16 +17,20 @@ django.setup()
 
 
 from channels.auth import AuthMiddlewareStack
-from channels.routing import ProtocolTypeRouter, URLRouter
+from channels.routing import ProtocolTypeRouter, URLRouter, ChannelNameRouter
 
 import webapp.routing
 
 
+websocket = AuthMiddlewareStack(
+    URLRouter(
+        webapp.routing.websocket_urlpatterns
+    )
+)
 application = ProtocolTypeRouter({
     "http": get_asgi_application(),
-    "websocket": AuthMiddlewareStack(
-        URLRouter(
-            webapp.routing.websocket_urlpatterns
-        )
+    "websocket": websocket,
+    "channel": ChannelNameRouter(
+        webapp.routing.channel_consumers
     ),
 })

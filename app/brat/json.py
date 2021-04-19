@@ -2,7 +2,7 @@ from .simplesplit import find_sentence_standoffs, find_token_standoffs
 
 
 
-def get_doc_json(doc, sentence_standoffs=None, token_standoffs=None):
+def get_doc_json(doc, sentence_standoffs=None, token_standoffs=None, norm_urls=None):
     text = doc.get_document_text()
 
     if sentence_standoffs is None:
@@ -36,9 +36,6 @@ def get_doc_json(doc, sentence_standoffs=None, token_standoffs=None):
         [ann.id, ann.type, ann.target, ann.value]
         for ann in doc.get_attributes()
     ]
-    norm_cuis = [norm[4] for norm in normalization_doc_data if norm[3] == 'UMLS']
-    # cui_data = get_cui_data(norm_cuis)
-    cui_data = {}
     doc_data = {
         "entities": entity_doc_data,
         "events": event_doc_data,
@@ -48,8 +45,8 @@ def get_doc_json(doc, sentence_standoffs=None, token_standoffs=None):
         "attributes": attribute_doc_data,
         "equivs": [],
         "normalizations": normalization_doc_data,
-        "cui_data": cui_data,
         "comments": [],
+        "norm_urls": norm_urls or {},
         "text": text,
         "annfile": str(doc),
         "token_offsets": token_standoffs,

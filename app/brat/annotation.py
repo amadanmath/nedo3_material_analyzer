@@ -1653,7 +1653,7 @@ class NormalizationAnnotation(IdedAnnotation):
         self.reftext = tail.lstrip('\t').rstrip('\n')
 
     def __str__(self):
-        return u'%s\t%s %s %s:%s%s' % (
+        return u'%s\t%s %s %s:%s\t%s' % (
             self.id,
             self.type,
             self.target,

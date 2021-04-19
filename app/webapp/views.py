@@ -1,3 +1,4 @@
+from django.middleware import csrf
 from django.conf import settings
 from django.shortcuts import render
 from django.utils import timezone
@@ -8,12 +9,14 @@ from django.contrib.auth import authenticate, login, logout
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 import re
+import logging
+
+
 from .consumers import user_group_name
-
-
-
-
 from .models import Job
+
+
+logger = logging.getLogger(__name__)
 
 
 def index(request):
@@ -41,6 +44,7 @@ def index(request):
 def update(request):
     try:
         job_id = request.POST["job"]
+        logger.error("UPDATE RECEIVED %s", job_id)
         error = request.POST.get("error")
         if not error:
             state = request.POST["state"]
@@ -67,6 +71,7 @@ def update(request):
 
     job.save()
 
+    logger.error("UPDATE SENDING UPDATE TO CHANNEL %s", job_id)
     channel_layer = get_channel_layer()
     group_name = user_group_name(job.user.username)
     async_to_sync(channel_layer.group_send)(group_name, {
@@ -75,11 +80,10 @@ def update(request):
         "id": job_id,
         "state": job.state,
     })
-
+    logger.error("UPDATE SENT UPDATE TO CHANNEL %s", job_id)
     return HttpResponse(status=204)
 
 
-@csrf_exempt
 def ajax_login(request):
     if not (request.is_ajax and request.method == "POST"):
         raise Http404()
@@ -100,13 +104,15 @@ def ajax_login(request):
             "success": True,
             "user": username,
             "count": count,
+            "csrf_token": csrf.get_token(request),
         }, status=200)
 
 
-@csrf_exempt
 def ajax_logout(request):
     if not (request.is_ajax and request.method == "POST"):
         raise Http404()
 
     logout(request)
-    return JsonResponse({}, status=200)
+    return JsonResponse({
+        "csrf_token": csrf.get_token(request),
+    }, status=200)

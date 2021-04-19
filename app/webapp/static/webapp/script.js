@@ -24,6 +24,7 @@
     let isMac = true; // TODO
     const modKey = isMac ? 'metaKey' : 'ctrlKey';
     const modKeyName = isMac ? 'Cmd' : 'Ctrl';
+    let csrfToken = $('input[name="csrfmiddlewaretoken"]').val();
 
     let resizerTimeout = null;
     let displayCommentTimeout = null;
@@ -209,14 +210,20 @@
                   Util.escapeHTML(spanText) +
                   '"</div>');
       $.each(normalizations, function(normNo, norm) {
-        let dbName = norm[0], dbKey = norm[1];
-        comment += ( '<hr/>' +
-                      '<a class="comment_id" href="https://uts.nlm.nih.gov//metathesaurus.html?cui=' + dbKey + '" target="uts_nlm_nih_gov">' +
-                      'UMLS:' +
-                      Util.escapeHTML(dbKey) + '</a>');
-        let cuiName = currentDocData.cui_data[dbKey];
-        if (cuiName) {
-          comment += ('<br/><div>' + Util.escapeHTML(cuiName) + '</div>');
+        console.log(norm, currentDocData); // DEBUG
+        const dbName = norm[0], dbKey = norm[1], normText = norm[2];
+        const urlPattern = currentDocData.norm_urls[dbKey];
+        comment += "<hr/>";
+        const normCode = Util.escapeHTML(dbName + ":" + dbKey);
+        if (urlPattern) {
+          const url = urlPattern.replace("%s", dbKey);
+          comment += '<a class="comment_id" href="' + url +
+            '" target="brat_norm">' + normCode + '</a>';
+        } else {
+          comment += '<div class="comment_id">' + normCode + '</div>';
+        }
+        if (normText) {
+          comment += ('<div class="norm_info_value">' + Util.escapeHTML(normText) + '</div>');
         }
       });
 
@@ -319,6 +326,7 @@
     const ws_url = (ws_protocol + "//" + location.host + location.pathname).replace(/\/$/, '') + "/ws/brat/";
     let sendJson = null;
     const WS = {
+      disconnect: () => Promise.resolve(),
       connect: function connectWS() {
         return new Promise((resolve, reject) => {
           const ws = new WebSocket(ws_url);
@@ -344,6 +352,7 @@
             sendJson = null;
             delete ws.onclose;
             ws.close();
+            return Promise.resolve();
           }
         });
       }
@@ -393,17 +402,14 @@
       .text(message)
       .removeClass().addClass(`text-${kind}`);
       currentUser = user;
-      if (!skipWS) {
-        if (user) {
-          WS.connect();
-        } else {
-          WS.disconnect();
-        }
-      }
-      currentCount = count;
-      updateBadge();
-      $('.logged-in').toggle(!!user);
-      page('/input');
+      (skipWS ? Promise.resolve() :
+        user ? WS.connect() : WS.disconnect())
+      .then(() => {
+        currentCount = count;
+        updateBadge();
+        $('.logged-in').toggle(!!user);
+        page('/input');
+      });
     }
 
 
@@ -520,9 +526,11 @@
           )
           .appendTo($tbody);
         }
-        $listPage.find('.nav-first, .nav-prev').prop('disabled', !prev);
-        $listPage.find('.nav-next, .nav-last').prop('disabled', !next);
-        $listPage.find('.nav-curr a').text(`${curr} / ${maxpage}`);
+        $listPage.find('.nav-first').attr('data-page', prev && 1).toggleClass('disabled', !prev);
+        $listPage.find('.nav-prev').attr('data-page', prev).toggleClass('disabled', !prev);
+        $listPage.find('.nav-next').attr('data-page', next).toggleClass('disabled', !next);
+        $listPage.find('.nav-last').attr('data-page', next && maxpage).toggleClass('disabled', !next);
+        $listPage.find('.nav-curr > div').text(`${curr} / ${maxpage}`);
         listCurrentPage = page;
         $listPage.show();
       },
@@ -535,6 +543,9 @@
           loadDoc(doc)
         }
       },
+      unauthorized: () => {
+        logInOut(null, 0, "Session timed out; please log in again", "warning");
+      },
     };
 
 
@@ -542,14 +553,16 @@
       const formData = new FormData();
       formData.append("username", $('#login_username').val());
       formData.append("password", $('#login_password').val());
+      formData.append("csrfmiddlewaretoken", csrfToken);
       fetch(urls.login, {
         method: "POST",
         body: formData,
       })
       .then(response => response.json())
-      .then(({ success, user, count }) => {
+      .then(({ success, user, count, csrf_token }) => {
         if (success) {
-          logInOut(user, count, "Logged in as ${user}", "success");
+          csrfToken = csrf_token;
+          logInOut(user, count, `Logged in as ${user}`, "success");
         } else {
           logInOut(user, count, "Login failed; please try again", "danger");
         }
@@ -559,11 +572,15 @@
     });
 
     $('#logout_button').click(evt => {
+      const formData = new FormData();
+      formData.append("csrfmiddlewaretoken", csrfToken);
       fetch(urls.logout, {
         method: "POST",
-        body: "",
+        body: formData,
       })
-      .then(response => {
+      .then(response => response.json())
+      .then(data => {
+        csrfToken = data.csrf_token;
         logInOut(null, 0, "Logged out; please log in again", "warning");
       });
     });
@@ -580,6 +597,7 @@
         "text": $input_text.val(),
       });
       $input_text.val('');
+      page('/list/1');
     });
 
     $('#list_button').click(evt => {
@@ -604,15 +622,18 @@
       page('/input');
     });
 
+    $('#list_page .pagination').on('click', '.page-item[data-page]', evt => {
+      const nextPage = $(evt.target).closest('.page-item').attr('data-page');
+      page(`/list/${nextPage}`);
+    });
+
     (currentUser ? WS.connect() : Promise.resolve())
     .then(() => {
       if (currentUser) {
-        logInOut(currentUser, currentCount, "Logged in as ${user}", "success", true);
+        logInOut(currentUser, currentCount, `Logged in as ${currentUser}`, "success", true);
       } else {
         logInOut(currentUser, currentCount, "Please log in", "warning", true);
       }
     });
   }
 })();
-
-

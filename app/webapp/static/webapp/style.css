@@ -46,3 +46,7 @@ main > section {
 .logged-in {
   display: none;
 }
+
+.page-link:not[:disabled] {
+  cursor: pointer;
+}

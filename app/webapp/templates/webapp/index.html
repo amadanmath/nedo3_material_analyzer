@@ -77,24 +77,19 @@
           <nav>
             <ul class="pagination justify-content-center">
               <li class="page-item nav-first">
-                <a class="page-link" href="#" tabindex="-1">First</a>
-                </a>
+                <div class="page-link" href="#" tabindex="-1">First</div>
               </li>
               <li class="page-item nav-prev">
-                <a class="page-link" href="#" tabindex="-1">Previous</a>
-                </a>
+                <div class="page-link" href="#" tabindex="-1">Previous</div>
               </li>
               <li class="page-item nav-curr">
-                <a class="page-link" href="#" tabindex="-1"></a>
-                </a>
+                <div class="page-link" href="#" tabindex="-1"></div>
               </li>
               <li class="page-item nav-next">
-                <a class="page-link" href="#" tabindex="-1">Next</a>
-                </a>
+                <div class="page-link" href="#" tabindex="-1">Next</div>
               </li>
               <li class="page-item nav-last">
-                <a class="page-link" href="#" tabindex="-1">Last</a>
-                </a>
+                <div class="page-link" href="#" tabindex="-1">Last</div>
               </li>
             </ul>
           </nav>
@@ -149,6 +144,7 @@
       </div>
     </footer>
 
+    {% csrf_token %}
     {{ data | json_script:"data" }}
     <script type="text/javascript" src="{% static "webapp/brat/head.load.min.js" %}"></script>
     <script type="text/javascript">

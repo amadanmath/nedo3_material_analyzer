@@ -4,14 +4,17 @@ from django.contrib.auth.models import User
 
 
 MAX_ACTION_LENGTH=30
+MAX_SERVER_ID_LENGTH=20
 
 
 class Job(models.Model):
-    QUEUED = 'Q'
-    STARTED = 'S'
-    FINISHED = 'F'
-    ERROR = 'E'
+    WAITING = 'W'    # the worker is not booted up yet
+    QUEUED = 'Q'     # submitted to the worker
+    STARTED = 'S'    # worker started working on it
+    FINISHED = 'F'   # the results are in
+    ERROR = 'E'      # something went wrong, details in `.ann`
     STATE_CHOICES = [
+        (WAITING, 'Waiting'),
         (QUEUED, 'Queued'),
         (STARTED, 'Started'),
         (FINISHED, 'Finished'),
@@ -31,27 +34,15 @@ class Job(models.Model):
     ann = models.TextField(null=True, blank=True)
     visual_conf = models.TextField(null=True, blank=True)
 
-    def state_name(self):
-        return self.STATE_CHOICES_DICT[self.state]
-
-    def is_finished(self):
-        return self.state == self.FINISHED
-
-    def duration(self):
-        if not self.finished_at:
-            return None
-        return (self.finished_at - self.started_at).total_seconds()
-
-    @classmethod
-    def new_count(cls, user):
-        return cls.objects.filter(
-                user=user,
-                state=Job.FINISHED,
-                viewed=False,
-            ).count()
-
     class Meta:
         indexes = [
-            models.Index(fields=['user', 'state']),
-            models.Index(fields=['submitted_at']),
+            # finished count per user, get waiting
+            models.Index(fields=['state', 'user']),
+            # list
+            models.Index(fields=['user', 'submitted_at']),
         ]
+
+
+class BootingServer(models.Model):
+    id = models.CharField(max_length=MAX_SERVER_ID_LENGTH, primary_key=True, editable=False)
+    booted_at = models.DateTimeField(auto_now_add=True)
