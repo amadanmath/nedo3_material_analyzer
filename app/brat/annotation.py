@@ -10,7 +10,8 @@
 # #                       #   if None, the document will not be read or saved
 # #     text=None,        # provides the text instead of loading from `.txt` file
 # #     read_only=False,  # if True, the document will not be saved
-# #     lock_dir=None)    # lock file directory (system tmp dir if None)
+# #     lock_dir=None,    # lock file directory (system tmp dir if None)
+# #     source=None)      # provides the annotations instead of loading from `.ann` file
 #
 # # TextBoundAnnotationWithText(
 # #     spans,            # list of (start, end) pairs

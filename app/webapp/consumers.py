@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.contrib.auth import authenticate
+from django.contrib.auth.models import User
 from channels.auth import login, logout
 from channels.consumer import AsyncConsumer
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
@@ -14,6 +15,7 @@ import logging
 import aiohttp
 import subprocess
 import asyncio
+import unicodedata
 from datetime import timezone, datetime, timedelta
 from itertools import groupby
 from enum import Enum
@@ -24,7 +26,11 @@ import botocore
 
 from brat.conf import parse_visual_conf, add_defaults
 from brat.json import get_doc_json, get_coll_json
+from brat.sudachisplit import find_token_standoffs
+from brat.modify_annotations import modify_annotations
 from brat.annotation import TextAnnotations
+from brat import webanno_tsv_reader
+from brat.diff_and_mark import AnnotationDiff
 import time
 
 from .models import Job
@@ -62,6 +68,11 @@ async def future_with_data(future, data):
 
 def epoch(dt):
     return dt.replace(tzinfo=timezone.utc).timestamp() if dt else None
+
+
+def nfkc_normalize(text):
+    return unicodedata.normalize('NFKC', text)
+
 
 @database_sync_to_async
 def get_paginated_jobs(user, page):
@@ -171,65 +182,12 @@ class BratConsumer(AsyncJsonWebsocketConsumer):
         logger.error("JSON RECEIVED: %s" % req_type)
 
         if req_type == "analyze":
-            text = content['text']
-            action = content['action']
-            user = self.scope["user"]
-            error = None
-            job = None
-
-            worker = workers[action]
-            url = worker["url"]
-            job = await database_sync_to_async(Job.objects.create)(
-                user=user,
-                action=action,
-                txt=text,
-            )
-
-            logger.error("MAKING THE REQUEST %s" % job.id)
-            timeout = aiohttp.ClientTimeout(total=1)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                data = {
-                    "job": str(job.id),
-                    "text": job.txt,
-                }
-                try:
-                    async with session.post(url, data=data) as response:
-                        logger.error("RESULT: %s %s", response.status, response.text())
-
-                        if response.status != 202:
-                            error = f"Status code {response.status}\n\n{response.text()}"
-
-                except (aiohttp.client_exceptions.ClientConnectorError, asyncio.TimeoutError):
-                    logger.error("ERROR in AIOHTTP")
-                    job.state = Job.WAITING
-                    await database_sync_to_async(job.save)()
-                    ec2_id = worker.get("ec2_id")
-                    logger.error("EC2 ID %s", ec2_id)
-                    if ec2_id:
-                        logger.error("SENDING BOOT MESSAGE")
-                        await self.channel_layer.send("worker-manager", {
-                            "type": "boot",
-                            "action": job.action,
-                        })
-                        logger.error("SENT BOOT MESSAGE")
-                    else:
-                        logger.warning("ec2_id for {} not configured, cannot boot server".format(action))
-
-            if job:
-                if error:
-                    job.ann = error
-                    job.state = Job.ERROR
-                    await database_sync_to_async(job.save)()
-
-                group_name = user_group_name(user.username)
-                logger.error("SUBMIT SENDING UPDATE TO CHANNEL %s", job.id)
-                await self.channel_layer.group_send(group_name, {
-                    "type": "update",
-                    "msg_type": "changed",
-                    "id": str(job.id),
-                    "state": job.state,
-                })
-                logger.error("SUBMIT SENT UPDATE TO CHANNEL")
+            await self.channel_layer.send("worker-manager", {
+                "type": "submit",
+                "text": content["text"],
+                "action": content["action"],
+                "user_id": self.scope["user"].id,
+            })
 
 
         elif req_type == "list":
@@ -253,28 +211,15 @@ class BratConsumer(AsyncJsonWebsocketConsumer):
                 error = "error"
 
             if error:
-                payload = {
+                await self.send_json({
+                    "type": "show",
+                    "id": str(job.id),
                     "error": error,
-                }
+                })
 
             else:
-                visual_conf = parse_visual_conf(job.visual_conf)
-                norm_urls = None # parse_tools_conf(job.tools_conf).norm_urls
                 doc = TextAnnotations(text=job.txt, source=job.ann)
-                specific_visual_conf = add_defaults(visual_conf, doc)
-                doc_json = get_doc_json(doc, norm_urls=norm_urls)
-                coll_json = get_coll_json(specific_visual_conf)
-                payload = {
-                    "action": job.action,
-                    "doc": doc_json,
-                    "coll": coll_json,
-                }
-
-            await self.send_json({
-                "type": "show",
-                "id": str(job.id),
-                **payload,
-            })
+                await self.show(job, doc)
 
             if job and not job.viewed:
                 job.viewed = True
@@ -285,6 +230,38 @@ class BratConsumer(AsyncJsonWebsocketConsumer):
                     "msg_type": "viewed",
                     "id": str(job.id),
                 })
+
+        elif req_type == "diff":
+            error = None
+            job_id = content["id"]
+            try:
+                job = await database_sync_to_async(Job.objects.get)(pk=job_id)
+            except Job.DoesNotExist:
+                error = "notfound"
+
+            if job and job.state == Job.ERROR:
+                error = "error"
+
+            other_ann = content["ann"]
+            if other_ann.startswith("#FORMAT"):
+                lines = other_ann.splitlines()
+                diff_doc = webanno_tsv_reader.from_lines(lines, nfkc_normalize(job.txt), nfkc_normalize)
+            else:
+                diff_doc = TextAnnotations(text=job.txt, source=other_ann)
+                modify_annotations(diff_doc, nfkc_normalize)
+
+            if error:
+                await self.send_json({
+                    "type": "show",
+                    "id": str(job.id),
+                    "error": error,
+                })
+
+            else:
+                job_doc = TextAnnotations(text=job.txt, source=job.ann)
+                modify_annotations(job_doc, nfkc_normalize)
+                doc = AnnotationDiff(diff_doc, job_doc).diff()
+                await self.show(job, doc)
 
         else:
             logger.error("Bad message type: {}".format(req_type))
@@ -299,6 +276,22 @@ class BratConsumer(AsyncJsonWebsocketConsumer):
             "type": msg_type,
         })
 
+    async def show(self, job, doc):
+        visual_conf = parse_visual_conf(job.visual_conf)
+        specific_visual_conf = add_defaults(visual_conf, doc)
+        norm_urls = None # parse_tools_conf(job.tools_conf).norm_urls
+        token_standoffs = find_token_standoffs(doc.get_document_text())
+        doc_json = get_doc_json(doc, norm_urls=norm_urls, token_standoffs=token_standoffs)
+        coll_json = get_coll_json(specific_visual_conf)
+        await self.send_json({
+            "type": "show",
+            "id": str(job.id),
+            "action": job.action,
+            "doc": doc_json,
+            "coll": coll_json,
+        })
+
+
 
 
 
@@ -312,22 +305,37 @@ class WorkerConsumer(AsyncConsumer):
                 "aws_session_token": ec2_token
             }
         else:
-            ec2_kwargs = {
-                "aws_access_key_id": os.environ["EC2_KEY_ID"],
-                "aws_secret_access_key": os.environ["EC2_ACCESS_KEY"],
-            }
-        ec2_region = os.environ.get('EC2_REGION')
-        if ec2_region:
-            ec2_config = botocore.config.Config(
-                region_name=ec2_region,
-            )
-            ec2_kwargs["config"] = ec2_config
+            ec2_key_id = os.environ.get("EC2_KEY_ID")
+            ec2_access_key = os.environ.get("EC2_ACCESS_KEY")
+            if ec2_key_id and ec2_access_key:
+                ec2_kwargs = {
+                    "aws_access_key_id": ec2_key_id,
+                    "aws_secret_access_key": ec2_access_key,
+                }
+            else:
+                logger.warning("EC2 not configured")
+                ec2_kwargs = None
 
-        self.ec2 = boto3.client("ec2", **ec2_kwargs)
+        if ec2_kwargs:
+            ec2_region = os.environ.get('EC2_REGION')
+            if ec2_region:
+                ec2_config = botocore.config.Config(
+                    region_name=ec2_region,
+                )
+                ec2_kwargs["config"] = ec2_config
+
+            self.ec2 = boto3.client("ec2", **ec2_kwargs)
+        else:
+            self.ec2 = None
+
         self.booting = set()
 
 
     async def boot(self, message):
+        if not self.ec2:
+            logger.error("No EC2 support and worker not up!")
+            return
+
         logger.error("WORKER BOOT!!!")
         action = message["action"]
         if action in self.booting:
@@ -397,3 +405,66 @@ class WorkerConsumer(AsyncConsumer):
                         pass
 
                 await asyncio.sleep(BOOT_CHECK_DELAY)
+
+
+    async def submit(self, message):
+        text = message['text']
+        action = message['action']
+        user_id = message['user_id']
+        error = None
+
+        # text = nfkc_normalize(text)
+        worker = workers[action]
+        url = worker["url"]
+        user = await database_sync_to_async(User.objects.get)(pk=user_id)
+        job = await database_sync_to_async(Job.objects.create)(
+            user=user,
+            action=action,
+            txt=text,
+        )
+
+        logger.error("MAKING THE REQUEST %s" % job.id)
+        timeout = aiohttp.ClientTimeout(total=1)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            data = {
+                "job": str(job.id),
+                "text": job.txt,
+            }
+            try:
+                async with session.post(url, data=data) as response:
+                    logger.error("RESULT: %s %s", response.status, await response.text())
+
+                    if response.status != 202:
+                        error = f"Status code {response.status}\n\n{await response.text()}"
+
+            except (aiohttp.client_exceptions.ClientConnectorError, asyncio.TimeoutError):
+                logger.error("ERROR in AIOHTTP")
+                job.state = Job.WAITING
+                await database_sync_to_async(job.save)()
+                ec2_id = worker.get("ec2_id")
+                logger.error("EC2 ID %s", ec2_id)
+                if ec2_id:
+                    logger.error("SENDING BOOT MESSAGE")
+                    await self.channel_layer.send("worker-manager", {
+                        "type": "boot",
+                        "action": job.action,
+                    })
+                    logger.error("SENT BOOT MESSAGE")
+                else:
+                    logger.warning("ec2_id for {} not configured, cannot boot server".format(action))
+
+        if job:
+            if error:
+                job.ann = error
+                job.state = Job.ERROR
+                await database_sync_to_async(job.save)()
+
+            group_name = user_group_name(user.username)
+            logger.error("SUBMIT SENDING UPDATE TO CHANNEL %s", job.id)
+            await self.channel_layer.group_send(group_name, {
+                "type": "update",
+                "msg_type": "changed",
+                "id": str(job.id),
+                "state": job.state,
+            })
+            logger.error("SUBMIT SENT UPDATE TO CHANNEL")

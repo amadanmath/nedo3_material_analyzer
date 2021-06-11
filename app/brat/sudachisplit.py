@@ -1,15 +1,11 @@
-from sudachipy import tokenizer
-from sudachipy import dictionary
-
+from sudachipy import dictionary, tokenizer
 from .standoffizer import Standoffizer
+from .simplesplit import find_sentence_standoffs
 
+sudachi_tokenizer = dictionary.Dictionary().create()
 
-tokenizer_obj = dictionary.Dictionary().create()
-mode = tokenizer.Tokenizer.SplitMode.C
-
-
-def find_token_standoffs(text):
-    morphemes = tokenizer_obj.tokenize(text, mode)
-    subs = [m.surface() for m in morphemes]
-    subs = [s for s in subs if not all(c.isspace() for c in s)]
-    return list(Standoffizer(text, subs))
+def find_token_standoffs(text, mode=tokenizer.Tokenizer.SplitMode.A, whitespace=False):
+    tokens = [m.surface() for m in sudachi_tokenizer.tokenize(text, mode)]
+    if not whitespace:
+        tokens = [t for t in tokens if not t.isspace()]
+    return list(Standoffizer(text, tokens))

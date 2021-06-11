@@ -48,8 +48,8 @@ WORKDIR $APP_HOME
 COPY --chown=app:app --from=builder /usr/src/app/wheels /wheels
 RUN apt-get update \
     && apt-get install -y gcc netcat \
-    && pip3 install --no-cache /wheels/* \
-    && sudachipy link -t core
+    && pip3 install --no-cache /wheels/*
+    # && sudachipy link -t core
 
 # copy project
 COPY --chown=app:app . $APP_HOME

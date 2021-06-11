@@ -86,7 +86,12 @@
 
     let collectionReady = Promise.resolve();
     let resolveCollectionReady = () => 0;
-    function spanAndAttributeTypesLoaded () {
+    let spanTypes = null;
+    let relationTypesHash = null;
+    let data = null;
+    function spanAndAttributeTypesLoaded (_spanTypes, _entityAttributeTypes, _eventAttributeTypes, _relationTypesHash) {
+      spanTypes = _spanTypes;
+      relationTypesHash = _relationTypesHash;
       resolveCollectionReady();
     }
     function loadColl(coll, action) {
@@ -230,6 +235,52 @@
       displayComment(evt, target, comment, commentText, commentType);
     }
 
+    function displayArcComment(
+        evt, target, symmetric, arcId,
+        originSpanId, originSpanType, role, 
+        targetSpanId, targetSpanType,
+        commentText, commentType) {
+      var arcRole = target.attr('data-arc-role');
+      // in arrowStr, &#8212 == mdash, &#8594 == Unicode right arrow
+      const arrowStr = symmetric ? '&#8212;' : '&#8594;';
+      const arcDisplayForm = Util.arcDisplayForm(spanTypes, 
+                                                 data.spans[originSpanId].type, 
+                                                 arcRole,
+                                                 relationTypesHash);
+      let comment = "";
+      comment += ('<span class="comment_type_id_wrapper">' +
+                  '<span class="comment_type">' +
+                  Util.escapeHTML(Util.spanDisplayForm(spanTypes,
+                                                        originSpanType)) +
+                  ' ' + arrowStr + ' ' +
+                  Util.escapeHTML(arcDisplayForm) +
+                  ' ' + arrowStr + ' ' +
+                  Util.escapeHTML(Util.spanDisplayForm(spanTypes,
+                                                        targetSpanType)) +
+                  '</span>' +
+                  '<span class="comment_id">' +
+                  (arcId ? 'ID:'+arcId : 
+                    Util.escapeHTML(originSpanId) +
+                    arrowStr + 
+                    Util.escapeHTML(targetSpanId)) +
+                  '</span>' +
+                  '</span>');
+      comment += ('<div class="comment_text">' + 
+                  Util.escapeHTML('"'+data.spans[originSpanId].text+'"') +
+                  arrowStr +
+                  Util.escapeHTML('"'+data.spans[targetSpanId].text + '"') +
+                  '</div>');
+      displayComment(evt, target, comment, commentText, commentType);
+    };
+
+    function rememberData(_data) {
+      if (_data && !_data.exception) {
+        data = _data;
+      }
+    };
+
+
+
     function renderCurrentData() {
       $('#btn_cancel').prop('disabled', false);
 
@@ -294,9 +345,11 @@
 
     dispatcher
       .on('spanAndAttributeTypesLoaded', spanAndAttributeTypesLoaded)
+      .on('dataReady', rememberData)
       .on('resize', onResize)
       .on('hideComment', hideComment)
       .on('displaySpanComment', displaySpanComment)
+      .on('displayArcComment', displayArcComment)
       .on('click', onSVGClicked)
       .on('mousemove', onMouseMove);
 
@@ -362,8 +415,8 @@
     // STATE VARIABLES
     let currentUser = DATA.user;
     let currentCount = DATA.count;
+    let shownJob = null;
     let listChanged = currentUser && currentCount;
-    console.log("DATA", DATA);
 
 
     // HELPER FUNCTIONS
@@ -395,6 +448,14 @@
       let time = `${i.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
       if (h) time = `${h}:${time}`;
       return time;
+    }
+
+    function invokeDiff(ann) {
+      sendJson({
+        type: "diff",
+        id: shownJob,
+        ann,
+      });
     }
 
     function logInOut(user, count, message, kind, skipWS) {
@@ -454,9 +515,10 @@
       });
     });
     page('/show/:id', ctx => {
+      shownJob = ctx.params.id;
       sendJson({
         type: "show",
-        id: ctx.params.id,
+        id: shownJob,
       });
     });
 
@@ -625,6 +687,48 @@
     $('#list_page .pagination').on('click', '.page-item[data-page]', evt => {
       const nextPage = $(evt.target).closest('.page-item').attr('data-page');
       page(`/list/${nextPage}`);
+    });
+
+    $('html, #diff_upload')
+    .on('dragenter dragleave dragover drop', evt => {
+      evt.preventDefault();
+      evt.stopPropagation();
+    });
+    $('html')
+    .on('dragenter dragover', evt => {
+      evt.originalEvent.dataTransfer.dropEffect = 'none';
+    });
+    $('#diff_upload')
+    .on('dragenter dragover', evt => {
+      evt.originalEvent.dataTransfer.dropEffect = 'copy';
+      $('#diff_upload').addClass('dropping');
+    })
+    .on('dragleave drop', evt => {
+      $('#diff_upload').removeClass('dropping');
+    })
+    .on('drop', evt => {
+      const files = evt.originalEvent.dataTransfer.files;
+      if (files.length) {
+        const file = files[0];
+        if (file.type.startsWith('text/')) {
+          file.text().then(ann => invokeDiff(ann));
+        }
+      } else {
+        const ann = evt.originalEvent.dataTransfer.getData('text');
+        invokeDiff(ann);
+      }
+    })
+    .on('keypress', evt => {
+      if (!(evt.ctrlKey || evt.metaKey)) {
+        evt.preventDefault();
+        evt.stopPropagation();
+      }
+    })
+    .on('paste', evt => {
+      const ann = evt.originalEvent.clipboardData.getData('text');
+      invokeDiff(ann);
+      evt.preventDefault();
+      evt.stopPropagation();
     });
 
     (currentUser ? WS.connect() : Promise.resolve())

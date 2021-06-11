@@ -36,7 +36,7 @@
       </div>
     </nav>
 
-    <main role="main" class="bd-content row">
+    <main role="main">
       <section id="login_page">
         <div class="d-flex justify-content-center mt-5">
           <form id="login_form" class="d-flex justify-content-center flex-column">
@@ -125,7 +125,15 @@
 
       <section id="show_page">
         <div id="commentpopup"></div>
-        <div id="svg" class="col-md-12"></div>
+        <div id="svg" class="w-100"></div>
+        <textarea id="diff_upload" rows="3" class="drop mt-3 w-100" placeholder="Paste or drag-and-drop a WebAnno .tsv or brat .ann file here to generate a diff. In case of WebAnno .tsv, the text will be matched as closely as possible."></textarea>
+        <!--
+        <form id="diff_form" class="form-inline mt-3">
+          <label class="control-label col-auto" for="diff_upload">Diff with:</label>
+          <input id="diff_upload" type="file" class="col-auto">
+          <button id="diff_submit" class="btn btn-primary col-auto">Diff</button>
+        </form>
+        -->
       </section>
     </main>
 

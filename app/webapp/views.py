@@ -2,6 +2,7 @@ from django.middleware import csrf
 from django.conf import settings
 from django.shortcuts import render
 from django.utils import timezone
+from django.views.decorators.http import require_safe, require_POST
 from django.http import Http404, HttpResponse, JsonResponse
 from django.utils.datastructures import MultiValueDictKeyError
 from django.views.decorators.csrf import csrf_exempt
@@ -18,7 +19,13 @@ from .models import Job
 
 logger = logging.getLogger(__name__)
 
+workers = {
+    worker['id']: worker
+    for worker in settings.WORKERS
+}
 
+
+@require_safe
 def index(request):
     index_uri = request.build_absolute_uri()
     ws_uri = re.sub("/$", "", re.sub(r"^https?:", "ws:", index_uri, flags=re.I)) + "/ws/brat/"
@@ -41,6 +48,7 @@ def index(request):
 
 
 @csrf_exempt
+@require_POST
 def update(request):
     try:
         job_id = request.POST["job"]
@@ -84,10 +92,8 @@ def update(request):
     return HttpResponse(status=204)
 
 
+@require_POST
 def ajax_login(request):
-    if not (request.is_ajax and request.method == "POST"):
-        raise Http404()
-
     username = request.POST['username']
     password = request.POST['password']
 
@@ -108,10 +114,8 @@ def ajax_login(request):
         }, status=200)
 
 
+@require_POST
 def ajax_logout(request):
-    if not (request.is_ajax and request.method == "POST"):
-        raise Http404()
-
     logout(request)
     return JsonResponse({
         "csrf_token": csrf.get_token(request),

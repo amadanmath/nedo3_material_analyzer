@@ -50,3 +50,11 @@ main > section {
 .page-link:not[:disabled] {
   cursor: pointer;
 }
+
+.drop {
+  border: 1px dashed #999999;
+}
+
+.dropping {
+  background-color: #ddffdd;
+}

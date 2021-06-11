@@ -36,6 +36,10 @@ def get_doc_json(doc, sentence_standoffs=None, token_standoffs=None, norm_urls=N
         [ann.id, ann.type, ann.target, ann.value]
         for ann in doc.get_attributes()
     ]
+    comment_doc_data = [
+        [ann.target, ann.type, ann.tail]
+        for ann in doc.get_oneline_comments()
+    ]
     doc_data = {
         "entities": entity_doc_data,
         "events": event_doc_data,
@@ -45,7 +49,7 @@ def get_doc_json(doc, sentence_standoffs=None, token_standoffs=None, norm_urls=N
         "attributes": attribute_doc_data,
         "equivs": [],
         "normalizations": normalization_doc_data,
-        "comments": [],
+        "comments": comment_doc_data,
         "norm_urls": norm_urls or {},
         "text": text,
         "annfile": str(doc),
