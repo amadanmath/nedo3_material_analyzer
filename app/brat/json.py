@@ -79,188 +79,189 @@ def get_coll_json(visual_conf):
         #     True
         # ]
     ]
-    event_coll_data = [
-        # {
-        #     "name": "Catalysis",
-        #     "type": "Catalysis",
-        #     "unused": False,
-        #     "labels": [
-        #         "Catalysis",
-        #     ],
-        #     "attributes": [
-        #     ],
-        #     "normalizations": [],
-        #     "fgColor": "black",
-        #     "bgColor": "#e0ff00",
-        #     "borderColor": "darken",
-        #     # "hotkey": "C",
-        #     "arcs": [
-        #         {
-        #             "type": "Theme",
-        #             "labels": [
-        #                 "Theme",
-        #                 "Th"
-        #             ],
-        #             "hotkey": "T",
-        #             "color": "black",
-        #             "arrowHead": "triangle,5",
-        #             "targets": [
-        #                 "Catalysis",
-        #                 "DNA_methylation",
-        #                 "DNA_demethylation",
-        #                 "Acetylation",
-        #                 "Methylation",
-        #                 "Glycosylation",
-        #                 "Hydroxylation",
-        #                 "Phosphorylation",
-        #                 "Ubiquitination",
-        #                 "Deacetylation",
-        #                 "Demethylation",
-        #                 "Deglycosylation",
-        #                 "Dehydroxylation",
-        #                 "Dephosphorylation",
-        #                 "Deubiquitination"
-        #             ]
-        #         },
-        #         {
-        #             "type": "Cause",
-        #             "labels": [
-        #                 "Cause",
-        #                 "Ca"
-        #             ],
-        #             "color": "#007700",
-        #             "arrowHead": "triangle,5",
-        #             "targets": [
-        #                 "Protein"
-        #             ]
-        #         }
-        #     ],
-        #     "children": []
-        # }
-    ]
-    entity_coll_data = [
-        {
-            "name": tag,
-            "type": tag,
-            "unused": False,
-            "labels": description.get("labels", [tag]),
-            "attributes": [],
-            "normalizations": [],
-            "fgColor": description.get("fgColor", "black"),
-            "bgColor": description.get("bgColor", "white"),
-            "borderColor": description.get("borderColor", "darken"),
-            # "hotkey": "A-C-S-T",
-            "arcs": [
-                # {
-                #     "type": "Equiv",
-                #     "labels": [
-                #         "Equiv",
-                #         "Eq"
-                #     ],
-                #     "color": "black",
-                #     "dashArray": "3,3",
-                #     "arrowHead": "none",
-                #     "targets": [
-                #         "Protein"
-                #     ]
-                # }
-            ],
-            "children": []
-        }
-        for tag, description in visual_conf.items()
-    ]
-    rel_coll_data = [
-        # {
-        #     "name": "Equiv",
-        #     "type": "Equiv",
-        #     "unused": False,
-        #     "labels": [
-        #         "Equiv",
-        #         "Eq"
-        #     ],
-        #     "attributes": [],
-        #     "properties": {
-        #         "symmetric": True,
-        #         "transitive": True
-        #     },
-        #     "color": "black",
-        #     "dashArray": "3,3",
-        #     "arrowHead": "none",
-        #     "args": [
-        #         {
-        #             "role": "Arg1",
-        #             "targets": [
-        #                 "Protein"
-        #             ]
-        #         },
-        #         {
-        #             "role": "Arg2",
-        #             "targets": [
-        #                 "Protein"
-        #             ]
-        #         }
-        #     ],
-        #     "children": []
-        # },
-        # {
-        #     "name": "Equiv",
-        #     "type": "Equiv",
-        #     "unused": False,
-        #     "labels": [
-        #         "Equiv",
-        #         "Eq"
-        #     ],
-        #     "attributes": [],
-        #     "properties": {
-        #         "symmetric": True,
-        #         "transitive": True
-        #     },
-        #     "color": "black",
-        #     "dashArray": "3,3",
-        #     "arrowHead": "none",
-        #     "args": [
-        #         {
-        #             "role": "Arg1",
-        #             "targets": [
-        #                 "Entity"
-        #             ]
-        #         },
-        #         {
-        #             "role": "Arg2",
-        #             "targets": [
-        #                 "Entity"
-        #             ]
-        #         }
-        #     ],
-        #     "children": []
-        # }
-    ]
-    event_attr_coll_data = [
-        # {
-        #     "name": "Negation",
-        #     "type": "Negation",
-        #     "unused": False,
-        #     "labels": None,
-        #     "values": [
-        #         {
-        #             "name": "Negation",
-        #             "box": "crossed"
-        #         }
-        #     ]
-        # },
-        # {
-        #     "name": "Speculation",
-        #     "type": "Speculation",
-        #     "unused": False,
-        #     "labels": None,
-        #     "values": [
-        #         {
-        #             "name": "Speculation",
-        #             "dashArray": "3,3"
-        #         }
-        #     ]
-        # }
-    ]
+    # event_coll_data = [
+    #     # {
+    #     #     "name": "Catalysis",
+    #     #     "type": "Catalysis",
+    #     #     "unused": False,
+    #     #     "labels": [
+    #     #         "Catalysis",
+    #     #     ],
+    #     #     "attributes": [
+    #     #     ],
+    #     #     "normalizations": [],
+    #     #     "fgColor": "black",
+    #     #     "bgColor": "#e0ff00",
+    #     #     "borderColor": "darken",
+    #     #     # "hotkey": "C",
+    #     #     "arcs": [
+    #     #         {
+    #     #             "type": "Theme",
+    #     #             "labels": [
+    #     #                 "Theme",
+    #     #                 "Th"
+    #     #             ],
+    #     #             "hotkey": "T",
+    #     #             "color": "black",
+    #     #             "arrowHead": "triangle,5",
+    #     #             "targets": [
+    #     #                 "Catalysis",
+    #     #                 "DNA_methylation",
+    #     #                 "DNA_demethylation",
+    #     #                 "Acetylation",
+    #     #                 "Methylation",
+    #     #                 "Glycosylation",
+    #     #                 "Hydroxylation",
+    #     #                 "Phosphorylation",
+    #     #                 "Ubiquitination",
+    #     #                 "Deacetylation",
+    #     #                 "Demethylation",
+    #     #                 "Deglycosylation",
+    #     #                 "Dehydroxylation",
+    #     #                 "Dephosphorylation",
+    #     #                 "Deubiquitination"
+    #     #             ]
+    #     #         },
+    #     #         {
+    #     #             "type": "Cause",
+    #     #             "labels": [
+    #     #                 "Cause",
+    #     #                 "Ca"
+    #     #             ],
+    #     #             "color": "#007700",
+    #     #             "arrowHead": "triangle,5",
+    #     #             "targets": [
+    #     #                 "Protein"
+    #     #             ]
+    #     #         }
+    #     #     ],
+    #     #     "children": []
+    #     # }
+    # ]
+    # entity_coll_data = [
+    #     {
+    #         "name": tag,
+    #         "type": tag,
+    #         "unused": False,
+    #         "labels": description.get("labels", [tag]),
+    #         "attributes": [],
+    #         "normalizations": [],
+    #         "fgColor": description.get("fgColor", "black"),
+    #         "bgColor": description.get("bgColor", "white"),
+    #         "borderColor": description.get("borderColor", "darken"),
+    #         # "hotkey": "A-C-S-T",
+    #         "arcs": [
+    #             {
+    #                 "type": "Equiv",
+    #                 "labels": [
+    #                     "Equiv",
+    #                     "Eq"
+    #                 ],
+    #                 "color": "black",
+    #                 "dashArray": "3,3",
+    #                 "arrowHead": "none",
+    #                 "targets": [
+    #                     "Protein"
+    #                 ]
+    #             }
+    #             for arc in description["arcs"]
+    #         ],
+    #         "children": []
+    #     }
+    #     for tag, description in visual_conf.items()
+    # ]
+    # rel_coll_data = [
+    #     # {
+    #     #     "name": "Equiv",
+    #     #     "type": "Equiv",
+    #     #     "unused": False,
+    #     #     "labels": [
+    #     #         "Equiv",
+    #     #         "Eq"
+    #     #     ],
+    #     #     "attributes": [],
+    #     #     "properties": {
+    #     #         "symmetric": True,
+    #     #         "transitive": True
+    #     #     },
+    #     #     "color": "black",
+    #     #     "dashArray": "3,3",
+    #     #     "arrowHead": "none",
+    #     #     "args": [
+    #     #         {
+    #     #             "role": "Arg1",
+    #     #             "targets": [
+    #     #                 "Protein"
+    #     #             ]
+    #     #         },
+    #     #         {
+    #     #             "role": "Arg2",
+    #     #             "targets": [
+    #     #                 "Protein"
+    #     #             ]
+    #     #         }
+    #     #     ],
+    #     #     "children": []
+    #     # },
+    #     # {
+    #     #     "name": "Equiv",
+    #     #     "type": "Equiv",
+    #     #     "unused": False,
+    #     #     "labels": [
+    #     #         "Equiv",
+    #     #         "Eq"
+    #     #     ],
+    #     #     "attributes": [],
+    #     #     "properties": {
+    #     #         "symmetric": True,
+    #     #         "transitive": True
+    #     #     },
+    #     #     "color": "black",
+    #     #     "dashArray": "3,3",
+    #     #     "arrowHead": "none",
+    #     #     "args": [
+    #     #         {
+    #     #             "role": "Arg1",
+    #     #             "targets": [
+    #     #                 "Entity"
+    #     #             ]
+    #     #         },
+    #     #         {
+    #     #             "role": "Arg2",
+    #     #             "targets": [
+    #     #                 "Entity"
+    #     #             ]
+    #     #         }
+    #     #     ],
+    #     #     "children": []
+    #     # }
+    # ]
+    # event_attr_coll_data = [
+    #     # {
+    #     #     "name": "Negation",
+    #     #     "type": "Negation",
+    #     #     "unused": False,
+    #     #     "labels": None,
+    #     #     "values": [
+    #     #         {
+    #     #             "name": "Negation",
+    #     #             "box": "crossed"
+    #     #         }
+    #     #     ]
+    #     # },
+    #     # {
+    #     #     "name": "Speculation",
+    #     #     "type": "Speculation",
+    #     #     "unused": False,
+    #     #     "labels": None,
+    #     #     "values": [
+    #     #         {
+    #     #             "name": "Speculation",
+    #     #             "dashArray": "3,3"
+    #     #         }
+    #     #     ]
+    #     # }
+    # ]
     unconf_coll_data = [
         # {
         #     "name": "Person",
@@ -287,13 +288,15 @@ def get_coll_json(visual_conf):
         # "normalization_config": norm_coll_data,
         # "annotation_logging": False,
         # "ner_taggers": [],
-        "event_types": event_coll_data,
-        "entity_types": entity_coll_data,
-        "relation_types": rel_coll_data,
-        "event_attribute_types": event_attr_coll_data,
-        "relation_attribute_types": [],
-        "entity_attribute_types": [],
-        "unconfigured_types": unconf_coll_data,
+
+        # "event_types": event_coll_data,
+        # "entity_types": entity_coll_data,
+        # "relation_types": rel_coll_data,
+        # "event_attribute_types": event_attr_coll_data,
+        # "relation_attribute_types": [],
+        # "entity_attribute_types": [],
+        # "unconfigured_types": unconf_coll_data,
+
         "ui_names": {
             "entities": "entities",
             "relations": "relations",
@@ -306,6 +309,8 @@ def get_coll_json(visual_conf):
         },
         # "action": "getCollectionInformation",
         # "protocol": 1
+
+        **visual_conf,
     }
 
     return coll_data

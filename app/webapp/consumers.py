@@ -20,6 +20,7 @@ from datetime import timezone, datetime, timedelta
 from itertools import groupby
 from enum import Enum
 import os
+import re
 import boto3
 import botocore
 
@@ -72,6 +73,15 @@ def epoch(dt):
 
 def nfkc_normalize(text):
     return unicodedata.normalize('NFKC', text)
+
+
+JA_PUNCTUATIONS = ['．', '。']
+_ja_punct_split_re = re.compile("(" + "|".join(re.escape(s) for s in JA_PUNCTUATIONS) + ")")
+def nfkc_normalize_without_jp_punct(text):
+    parts = _ja_punct_split_re.split(text)
+    for index in range(0, len(parts), 2):
+        parts[index] = unicodedata.normalize('NFKC', parts[index])
+    return ''.join(parts)
 
 
 @database_sync_to_async
@@ -242,13 +252,14 @@ class BratConsumer(AsyncJsonWebsocketConsumer):
             if job and job.state == Job.ERROR:
                 error = "error"
 
+            modifier = nfkc_normalize_without_jp_punct
             other_ann = content["ann"]
             if other_ann.startswith("#FORMAT"):
                 lines = other_ann.splitlines()
-                diff_doc = webanno_tsv_reader.from_lines(lines, nfkc_normalize(job.txt), nfkc_normalize)
+                diff_doc = webanno_tsv_reader.from_lines(lines, modifier(job.txt), modifier)
             else:
                 diff_doc = TextAnnotations(text=job.txt, source=other_ann)
-                modify_annotations(diff_doc, nfkc_normalize)
+                modify_annotations(diff_doc, modifier)
 
             if error:
                 await self.send_json({
@@ -259,7 +270,7 @@ class BratConsumer(AsyncJsonWebsocketConsumer):
 
             else:
                 job_doc = TextAnnotations(text=job.txt, source=job.ann)
-                modify_annotations(job_doc, nfkc_normalize)
+                modify_annotations(job_doc, modifier)
                 doc = AnnotationDiff(diff_doc, job_doc).diff()
                 await self.show(job, doc)
 
@@ -277,12 +288,12 @@ class BratConsumer(AsyncJsonWebsocketConsumer):
         })
 
     async def show(self, job, doc):
-        visual_conf = parse_visual_conf(job.visual_conf)
-        specific_visual_conf = add_defaults(visual_conf, doc)
+        raw_visual_conf = parse_visual_conf(job.visual_conf)
+        visual_conf = add_defaults(raw_visual_conf, doc)
         norm_urls = None # parse_tools_conf(job.tools_conf).norm_urls
         token_standoffs = find_token_standoffs(doc.get_document_text())
         doc_json = get_doc_json(doc, norm_urls=norm_urls, token_standoffs=token_standoffs)
-        coll_json = get_coll_json(specific_visual_conf)
+        coll_json = get_coll_json(visual_conf)
         await self.send_json({
             "type": "show",
             "id": str(job.id),
@@ -413,7 +424,7 @@ class WorkerConsumer(AsyncConsumer):
         user_id = message['user_id']
         error = None
 
-        # text = nfkc_normalize(text)
+        text = nfkc_normalize_without_jp_punct(text)
         worker = workers[action]
         url = worker["url"]
         user = await database_sync_to_async(User.objects.get)(pk=user_id)
