@@ -30,7 +30,7 @@ from brat.json import get_doc_json, get_coll_json
 from brat.sudachisplit import find_token_standoffs
 from brat.modify_annotations import modify_annotations
 from brat.annotation import TextAnnotations
-from brat import webanno_tsv_reader
+from brat import webanno_tsv
 from brat.diff_and_mark import AnnotationDiff
 import time
 
@@ -256,7 +256,7 @@ class BratConsumer(AsyncJsonWebsocketConsumer):
             other_ann = content["ann"]
             if other_ann.startswith("#FORMAT"):
                 lines = other_ann.splitlines()
-                diff_doc = webanno_tsv_reader.from_lines(lines, modifier(job.txt), modifier)
+                diff_doc = webanno_tsv.from_lines(lines, modifier(job.txt), modifier)
             else:
                 diff_doc = TextAnnotations(text=job.txt, source=other_ann)
                 modify_annotations(diff_doc, modifier)
