@@ -41,3 +41,5 @@ services:
       - $HTTP_PORT:80
     depends_on:
       - web
+    env_file:
+      - ./.env

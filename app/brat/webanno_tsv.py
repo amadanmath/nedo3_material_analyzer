@@ -1,11 +1,14 @@
 import re
 from enum import Enum
 from collections import defaultdict
+import bisect
+import itertools
 from .annotation import TextAnnotations, TextBoundAnnotationWithText, EventAnnotation, BinaryRelationAnnotation
 from .standoffizer import Standoffizer
 
-_header_re = re.compile(r"^#(?P<name>FORMAT|Sentence.id|T_(?:SP|RL|CH)|Text)=(?P<content>.*)$")
-_slot_re = re.compile(r"^(?:ROLE_([\w.]+):(?:Roles|links)_([\w.]+)|BT_([\w.]+)|(.*))$")
+# _header_re = re.compile(r"^#(?P<name>FORMAT|Sentence.id|T_(?:SP|RL|CH)|Text)=(?P<content>.*)$")
+_header_re = re.compile(r"^#(?:(?P<name>FORMAT|Sentence.id|T_(?:SP|RL|CH)|Text|VALS)=(?P<content>.*)$)?")
+_slot_re = re.compile(r"^(?:ROLE_([\w.]+):([a-zA-Z]+)_([\w.]+)|BT_([\w.]+)|(.*))$")
 _anno_id_pattern = r"\d+-\d+(?:\.\d+)?"
 _anno_id_re = re.compile(r"^(\d+)-(\d+)(?:\.(\d+))?$")
 _ent_re = re.compile(r"^(?:_|([^\]\[\s]+)(?:\[([\d]+)\])?)$")
@@ -46,7 +49,7 @@ class Slot:
 
     @staticmethod
     def parse(raw, col_ix, after_arc, header_kind):
-        evt_source, evt_target, rel_source, val_name = _slot_re.match(raw).groups()
+        evt_source, arc_name, evt_target, rel_source, val_name = _slot_re.match(raw).groups()
         kind = (
             (rel_source and Slot.Kind.REL) or
             (header_kind == Header.Kind.RL and Slot.Kind.REN) or
@@ -56,10 +59,21 @@ class Slot:
             Slot.Kind.FTR
         )
         name = evt_target or rel_source or val_name
-        return Slot(kind, col_ix, name)
+        slot = Slot(kind, col_ix, name)
+        if kind == Slot.Kind.ARC:
+            slot.additional = (evt_source, arc_name)
+        return slot
 
     def __repr__(self):
         return f"<{self.kind.name}#{self.col_ix}:{self.name}>"
+
+    def __str__(self):
+        name = self.name
+        if self.kind == Slot.Kind.REL:
+            return f"BT_{name}"
+        if self.kind == Slot.Kind.ARC:
+            return f"ROLE_{self.additional[0]};{self.additional[1]}_{name}"
+        return name
 
 
 class Header:
@@ -95,9 +109,13 @@ class Header:
     def __repr__(self):
         return f"<{self.kind.name}:{self.klass} {self.slots}>"
 
+    def __str__(self):
+        str_slots = [str(slot) for slot in self.slots]
+        return f"#T_{self.kind.name}={'|'.join([self.klass, *str_slots])}\n"
+
 
 class AnnoId:
-    def __init__(self, sentence_id, token_id, part_id):
+    def __init__(self, sentence_id, token_id, part_id=None):
         self.sentence_id = sentence_id
         self.token_id = token_id
         self.part_id = part_id
@@ -225,10 +243,10 @@ def preparse(lines):
     annos = []
     text = ""
 
-    header_ixs_by_klass = {}
     header_col = 0
     token_ix = -1
     current_text = ""
+    val_map = {}
 
     for line in lines:
         line = line.rstrip("\n")
@@ -239,16 +257,23 @@ def preparse(lines):
         if header_match:
             header_name = header_match.group("name")
             header_content = header_match.group("content")
-            if header_name == "FORMAT":
+            if header_name is None:
+                # comment
+                pass
+            elif header_name == "FORMAT":
                 pass
             elif header_name == "Sentence.id":
                 pass
             elif header_name == "Text":
                 current_text += header_content + "\n"
+            elif header_name == "VALS":
+                header_name, slot_name, values = header_content.split("|")
+                vals = values.split(",")
+                for val in vals:
+                    val_map[val] = (header_name, slot_name)
             else:
                 header = Header.parse(header_name, header_content, header_col)
                 header_col += len(header.slots)
-                header_ixs_by_klass[header.klass] = len(headers)
                 headers.append(header)
         else:
             raw_anno_id, standoff, surface, *columns = line.split("\t")
@@ -263,12 +288,17 @@ def preparse(lines):
             anno = [anno_id, token_ix, (start, end), surface, columns]
             annos.append(anno)
 
+    header_map = defaultdict(dict)
     for header in headers:
         for slot in header.slots:
-            if slot.kind == Slot.Kind.ART:
-                slot.art_header_ix = header_ixs_by_klass[slot.name]
+            header_map[header.klass][slot.name] = (header, slot)
 
-    return headers, annos, text
+    vals = {
+        val: header_map[header_name][slot_name]
+        for val, (header_name, slot_name) in val_map.items()
+        }
+
+    return headers, annos, text, vals
 
 
 def collect_data(headers, annos, label_strategy=first_label_strategy):
@@ -396,7 +426,7 @@ def make_textspans(dis_ids, dis_id_by_anno_id, evts, rels, chains, doc):
         source_dis_id = rel_value.dis_id
         target_dis_id = rel_value.tgt_dis_id
         source = entity_map.get(source_dis_id or dis_id_by_anno_id[rel_value.source_id.sent_tok_id])
-        target = entity_map.get(target_dis_id or dis_id_by_anno_id[anno_id.sent_tok_id])
+        target = entity_map.get(target_dis_id or dis_id_by_anno_id[target_anno_id.sent_tok_id])
         label = ren_value.label or ren_slot.label
         ann_id = doc.get_new_id("R")
         ann = BinaryRelationAnnotation(ann_id, label, "Arg1", source, "Arg2", target, tail="")
@@ -407,8 +437,9 @@ def make_textspans(dis_ids, dis_id_by_anno_id, evts, rels, chains, doc):
         pass
 
 
+
 def from_lines(lines, text=None, modifier=None):
-    headers, annos, tsv_text = preparse(lines)
+    headers, annos, tsv_text, _ = preparse(lines)
 
     if modifier is not None or text is not None:
         if modifier is None:
@@ -436,17 +467,180 @@ def from_lines(lines, text=None, modifier=None):
     return doc
 
 
+def headers_from_lines(lines):
+    headers, _, _, vals = preparse(lines)
+    return headers, vals
+
+
+def is_full_tsv(lines):
+    format = next((line.startswith("#FORMAT") for line in lines), None)
+    if format is None:
+        # not a WebAnno TSV at all
+        return None
+    has_annos = any(line and not line.startswith("#") for line in (line.strip() for line in lines))
+    return has_annos
+
+
+def to_lines(doc, headers, sentence_offsets, token_offsets, vals):
+    header_lines = [str(header) for header in headers]
+    text = doc.get_document_text()
+    sentence_texts = [text[start:end] for start, end in sentence_offsets]
+    num_cols = sum(len(header.slots) for header in headers)
+
+    token_iter = enumerate(token_offsets)
+    token_ids = []
+    annolists = {}
+    annolists_by_tok_id = [None] * len(token_offsets)
+    get_next_token = True
+    for sent_num, (sent_start, sent_end) in enumerate(sentence_offsets, 1):
+        in_range = False
+        token_num = 0
+        while True:
+            if get_next_token:
+                try:
+                    tok_num, (start, end) = next(token_iter)
+                except StopIteration:
+                    break
+            if end > sent_end:
+                get_next_token = False
+                break
+            get_next_token = True
+            if start >= sent_start:
+                in_range = True
+            if in_range:
+                token_num += 1
+                anno_id = AnnoId(sent_num, token_num)
+                token_ids.append(anno_id)
+                anno = [anno_id, (start, end), text[start:end], [[] for _ in range(num_cols)]]
+                annolists[anno_id] = [anno]
+                annolists_by_tok_id[tok_num] = annolists[anno_id]
+
+    default_event_header = next((
+        header for header in headers
+        if any(slot.kind == Slot.Kind.ART for slot in header.slots)
+        and all(slot.kind != Slot.Kind.FTR for slot in header.slots)
+    ), None)
+    trigger_set = set(ann.id for ann in doc.get_triggers())
+
+    dis_id = 0
+    dis_ids_map = {}
+    entity_map = {}
+    for ann in doc.get_textbounds():
+        val = ann.type
+        header, slot = (
+            vals.get(val) or
+            (ann.id in trigger_set and (default_event_header_slot, None)) or
+            vals["*"]
+        )
+        for standoff in ann.spans:
+            start, end = standoff
+            pos = bisect.bisect_left(token_offsets, standoff)
+            while pos <= len(token_offsets) and token_offsets[pos][0] < end:
+                tok_start, tok_end = token_offsets[pos]
+                annolist = annolists_by_tok_id[pos]
+                if tok_start < start:
+                    tok_start = start
+                if tok_end > end:
+                    tok_end = end
+                standoff = (tok_start, tok_end)
+                anno = next((anno for anno in annolist if anno[1] == standoff), None)
+                if anno is None:
+                    anno_id = annolist[0][0]
+                    anno_id = AnnoId(anno_id.sentence_id, anno_id.token_id, len(annolist))
+                    anno = [anno_id, standoff, text[tok_start:tok_end], [[] for _ in range(num_cols)]]
+                    annolist.append(anno)
+                for cur_slot in header.slots:
+                    content = val if cur_slot == slot else "*"
+                    anno[3][cur_slot.col_ix].append(f"{content}[{dis_id}]")
+                if ann.id not in entity_map:
+                    entity_map[ann.id] = (header, anno, len(anno[3][0]) - 1, dis_id)
+                pos += 1
+        dis_id += 1
+
+    for ann in doc.get_events():
+        val = ann.type
+        header, anno, item_ix, _ = entity_map[ann.trigger]
+        art_slot = next((slot for slot in header.slots if slot.kind == Slot.Kind.ART), None)
+        arc_slot = next((slot for slot in header.slots if slot.kind == Slot.Kind.ARC), None)
+        roles = []
+        targets = []
+        for role, target in ann.args:
+            _, target_anno, _, target_dis_id = entity_map[target]
+            target_anno_id = target_anno[0]
+            targets.append(f"{target_anno_id}[{target_dis_id}]")
+            roles.append(f"{role}[{target_dis_id}]")
+        anno[3][art_slot.col_ix][item_ix] = ";".join(targets)
+        anno[3][arc_slot.col_ix][item_ix] = ";".join(roles)
+
+    for ann in doc.get_relations():
+        header, span = vals[ann.type]
+        ren_slot = next((slot for slot in header.slots if slot.kind == Slot.Kind.REN), None)
+        rel_slot = next((slot for slot in header.slots if slot.kind == Slot.Kind.REL), None)
+        header1, anno1, item_ix1, dis_id1 = entity_map[ann.arg1]
+        header2, anno2, item_ix2, dis_id2 = entity_map[ann.arg2]
+        anno2[3][ren_slot.col_ix].append(ann.type)
+        anno2[3][rel_slot.col_ix].append(f"{anno1[0]}[{dis_id1}_{dis_id2}]")
+        # XXX how about other T_RL slots?
+
+    sentence_blocks = []
+    annolists_in_order = [annolist for annolist in annolists_by_tok_id if annolist]
+    for sent_num, sent_annolists in itertools.groupby(annolists_in_order, key=lambda annolist: annolist[0][0].sentence_id):
+        sent_text_lines = [
+            f"#Text={line}\n"
+            for line in sentence_texts[sent_num - 1].splitlines()
+        ]
+        sent_anno_lines = [
+            "\t".join((
+                str(anno_id),
+                f"{begin}-{end}",
+                token_text,
+                *(
+                    "|".join(item) if item else "_"
+                    for item in slot_items
+                )
+            )) + "\n"
+            for annolist in sent_annolists
+            for anno_id, (begin, end), token_text, slot_items in annolist
+        ]
+        sentence_blocks.append(["\n", *sent_text_lines, *sent_anno_lines])
+
+    # TODO sentence_tokens
+    lines = [
+        "#FORMAT=WebAnno TSV 3.3\n",
+        *header_lines,
+        *(line for sentence_lines in sentence_blocks for line in sentence_lines),
+    ]
+    return lines
 
 if __name__ == "__main__":
     import sys
 
+    if len(sys.argv) == 1:
+        print("python -m brat.webanno_tsv webanno_header.tsv brat_doc \tconvert brat to WebAnno tsv")
+        print("python -m brat.webanno_tsv webanno_doc.tsv [text.txt]  \tconvert WebAnno tsv to brat")
+        sys.exit(1)
+
     with open(sys.argv[1], "rt") as r:
         lines = r.readlines()
-    if len(sys.argv) >= 3:
-        with open(sys.argv[2], "rt") as r:
-            text = r.read()
-    else:
-        text = None
+    full_tsv = is_full_tsv(lines)
+    if full_tsv is None:
+        print("Not a WebAnno TSV")
+        sys.exit(1)
+    if full_tsv:
+        if len(sys.argv) >= 3:
+            with open(sys.argv[2], "rt") as r:
+                text = r.read()
+        else:
+            text = None
 
-    doc = from_lines(lines, text)
-    print(doc, end="")
+        doc = from_lines(lines, text)
+        print(doc, end="")
+    else:
+        headers, vals = headers_from_lines(lines)
+        doc = TextAnnotations(sys.argv[2])
+        from brat.sudachisplit import find_sentence_standoffs, find_token_standoffs
+        text = doc.get_document_text()
+        sentence_offsets = list(find_sentence_standoffs(text))
+        token_offsets = list(find_token_standoffs(text))
+        tsv = to_lines(doc, headers, sentence_offsets, token_offsets, vals)
+        print("".join(tsv), end="")
