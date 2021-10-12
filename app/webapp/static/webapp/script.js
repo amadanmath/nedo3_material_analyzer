@@ -475,6 +475,11 @@
 
 
     // PAGE ROUTING
+    console.log(DATA);
+    if (DATA.subdomain) {
+      page.base(DATA.subdomain);
+      console.log(page.base());
+    }
     page('*', (ctx, next) => { // DEBUG
       console.log("PAGE", ctx);
       next();

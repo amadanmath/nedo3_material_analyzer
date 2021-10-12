@@ -39,6 +39,7 @@ def index(request):
     return render(request, "webapp/index.html", {
         "workers": settings.WORKERS,
         "data": {
+            "subdomain": settings.SCRIPT_NAME,
             "count": count,
             "user": username,
             "workers": { w["id"]: w["name"] for w in settings.WORKERS },
